@@ -43,31 +43,34 @@
         <!-- Manual fallback entry, in case camera scan isn't available -->
         <div class="manual-entry">
           <label for="manual-qrlock-id">Or enter QR Lock ID manually:</label>
-          <input type="text" id="manual-qrlock-id" placeholder="A01-FQC-01">
+          <input type="text" id="manual-qrlock-id" placeholder="e.g. QRL-0001">
           <button id="btn-manual-lookup" type="button" class="btn-secondary">Lookup</button>
         </div>
 
         <!-- Status/error messages for the scan step -->
         <p id="qr-scan-message" class="message"></p>
 
-        <!-- Auto-retrieved Stage / Floor / Line display -->
+        <!-- Auto-retrieved Stage / Floor / Line, plus ticket details
+             (PMO/Customer/File/Style/Color/Round + history) when the
+             lock already has an active ticket (Status = In Use) -->
         <div id="qr-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">QR Lock ID:</span> <span id="res-qrlockid"></span></div>
           <div class="result-row"><span class="result-label">Stage:</span> <span id="res-stage"></span></div>
           <div class="result-row"><span class="result-label">Floor:</span> <span id="res-floor"></span></div>
           <div class="result-row"><span class="result-label">Line:</span> <span id="res-line"></span></div>
-          <div class="result-row"><span class="result-label">Status:</span> <span id="res-status"></span></div>
-        </div>
 
-        <!-- Shown only when the lock's Status is "In Use":
-             displays the existing ticket + its inspection/defect history -->
-        <div id="ticket-history" class="history-box hidden">
-          <h3>This lock is already In Use — existing ticket data:</h3>
-          <div id="history-ticket"></div>
-          <h4>Inspection History</h4>
-          <div id="history-inspections"></div>
-          <h4>Defect History</h4>
-          <div id="history-defects"></div>
+          <div id="ticket-history" class="hidden">
+            <div class="result-row"><span class="result-label">PMO:</span> <span id="res-scan-pmo"></span></div>
+            <div class="result-row"><span class="result-label">Customer:</span> <span id="res-scan-customer"></span></div>
+            <div class="result-row"><span class="result-label">File:</span> <span id="res-scan-file"></span></div>
+            <div class="result-row"><span class="result-label">Style:</span> <span id="res-scan-style"></span></div>
+            <div class="result-row"><span class="result-label">Color:</span> <span id="res-scan-color"></span></div>
+            <div class="result-row"><span class="result-label">Round:</span> <span id="res-scan-round"></span></div>
+
+            <h4>Inspection History</h4>
+            <div id="history-inspections"></div>
+            <h4>Defect History</h4>
+            <div id="history-defects"></div>
+          </div>
         </div>
       </section>
 
@@ -104,9 +107,17 @@
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
 
-        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Complete Round</button>
+        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Save Round</button>
         <p id="save-continue-message" class="message"></p>
       </section>
+
+      <!-- ======================================================
+           STEPS 2-5: New Ticket flow. Fully hidden (not just
+           disabled) unless the scanned QR Lock's Status was
+           "Available" - the Continue Inspection section above
+           handles the "In Use" case instead.
+           ====================================================== -->
+      <div id="new-ticket-flow" class="hidden">
 
       <!-- ======================================================
            STEP 2: Enter Employee ID
@@ -190,6 +201,8 @@
         <p id="save-message" class="message"></p>
         <div id="save-result" class="result-box hidden"></div>
       </section>
+
+      </div><!-- /new-ticket-flow -->
 
     </main>
   </div>
