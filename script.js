@@ -226,11 +226,19 @@ async function callApi(action, payload) {
       history.inspections.forEach(function (row) {
         const el = document.createElement('div');
         el.className = 'history-entry';
-        el.textContent = 'Round ' + row.Round + ' - ' + row.Result +
+        const resultClass = row.Result === 'Pass' ? 'text-green' : 'text-red';
+        el.innerHTML = 'Round ' + row.Round + ' - <span class="' + resultClass + '">' + row.Result + '</span>' +
           ' (by ' + row.CheckedByEmployeeName + ' on ' + row.InspectionDateTime + ')';
         inspectionsDiv.appendChild(el);
       });
     }
+
+    // A defect row is "Unsolved" only if it belongs to the ticket's
+    // current round AND the ticket is still Open - any older-round
+    // row, or any row once the ticket is Closed, is "Solved" (since
+    // still-outstanding items are always re-added into the newest round).
+    const currentRound = history.ticket ? Number(history.ticket.CurrentRound) : null;
+    const ticketOpen = history.ticket && history.ticket.Status === 'Open';
 
     const defectsDiv = document.getElementById('history-defects');
     defectsDiv.innerHTML = '';
@@ -240,7 +248,11 @@ async function callApi(action, payload) {
       history.defects.forEach(function (row) {
         const el = document.createElement('div');
         el.className = 'history-entry';
-        el.textContent = 'Round ' + row.Round + ' - Part: ' + row.Part + ', Defect: ' + row.Defect;
+        const isUnsolved = ticketOpen && Number(row.Round) === currentRound;
+        const statusClass = isUnsolved ? 'text-red' : 'text-green';
+        const statusText = isUnsolved ? 'Unsolved' : 'Solved';
+        el.innerHTML = 'Round ' + row.Round + ' - Part: ' + row.Part + ', Defect: ' + row.Defect +
+          ' - <span class="' + statusClass + '">' + statusText + '</span>';
         defectsDiv.appendChild(el);
       });
     }
@@ -360,7 +372,7 @@ async function callApi(action, payload) {
       return;
     }
 
-    showEmployeeMessage('Employee found.', 'success');
+    showEmployeeMessage('', '');
     document.getElementById('res-empid').textContent = emp.EmployeeID;
     document.getElementById('res-empname').textContent = emp.EmployeeName;
     document.getElementById('employee-result').classList.remove('hidden');
@@ -839,7 +851,7 @@ async function callApi(action, payload) {
 
     appState.continueData.previousDefects.forEach(function (d, index) {
       const item = document.createElement('div');
-      item.className = 'prev-defect-item';
+      item.className = 'prev-defect-item state-unsolved'; // default state = Unsolved
       const groupName = 'prevdef_' + index;
       item.innerHTML =
         '<span class="prev-defect-text">Part: ' + d.Part + ' | Defect: ' + d.Defect + '</span>' +
@@ -849,6 +861,8 @@ async function callApi(action, payload) {
       item.querySelectorAll('input[type="radio"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
           appState.continueData.resolvedStates[index] = radio.value;
+          item.classList.remove('state-solved', 'state-unsolved');
+          item.classList.add(radio.value === 'solved' ? 'state-solved' : 'state-unsolved');
         });
       });
 
@@ -894,7 +908,7 @@ async function callApi(action, payload) {
       return;
     }
 
-    showCheckerMessage('Employee found.', 'success');
+    showCheckerMessage('', '');
     document.getElementById('res-checker-id').textContent = emp.EmployeeID;
     document.getElementById('res-checker-name').textContent = emp.EmployeeName;
     document.getElementById('checker-result').classList.remove('hidden');
