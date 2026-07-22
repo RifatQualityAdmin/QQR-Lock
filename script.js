@@ -988,6 +988,7 @@ async function callApi(action, payload) {
       showContinueDefectMessage('Please select both a Part and a Defect.', 'error');
       return;
     }
+
     const isDuplicate = appState.continueData.newDefects.some(function (row) {
       return row.part === continueSelectedPart.PartName && row.defect === continueSelectedDefect.DefectName;
     });
@@ -995,6 +996,20 @@ async function callApi(action, payload) {
       showContinueDefectMessage('This Part + Defect combination is already added.', 'error');
       return;
     }
+
+    // Block re-adding a Part+Defect that's still marked Unsolved from a
+    // previous round - it's already being carried forward as open, so
+    // adding it again here would be a redundant duplicate.
+    const isStillOpen = appState.continueData.previousDefects.some(function (d, index) {
+      return d.Part === continueSelectedPart.PartName &&
+        d.Defect === continueSelectedDefect.DefectName &&
+        appState.continueData.resolvedStates[index] === 'unsolved';
+    });
+    if (isStillOpen) {
+      showContinueDefectMessage('This Part + Defect is already recorded as Unsolved - no need to add it again.', 'error');
+      return;
+    }
+
     appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName });
     renderContinueNewDefectList();
     showContinueDefectMessage('Defect added.', 'success');
