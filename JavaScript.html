@@ -35,6 +35,7 @@
     initContinueStep();
     initSaveStep();
   });
+
   /**
    * ============================================================
    * Module 2: QR Scan -> Auto-retrieve Stage / Floor / Line
@@ -123,10 +124,6 @@
    * @param {Object} data - Result object returned from the server.
    */
   function onQrLockDataReceived(data) {
-    if (!data) {
-      showQrMessage('No response from server. Check Apps Script Executions log for errors.', 'error');
-      return;
-    }
     appState.qrLock = data.found ? data : null;
 
     if (!data.found) {
@@ -154,7 +151,7 @@
     }
 
     // Only a lock that is currently "Available" can move on to
-    // creating a new ticket (per the agreed workflow rule).
+    // creating a new ticket; "In Use" moves into Continue Inspection.
     if (data.status === 'Available') {
       document.getElementById('step-continue').classList.add('hidden');
       enableEmployeeStep();
@@ -379,8 +376,7 @@
     el.className = 'message' + (type ? ' ' + type : '');
   }
 
-
-/**
+  /**
    * ============================================================
    * Module 4: PMO -> Auto-retrieve Customer / File / Style / Color
    * ============================================================
@@ -461,6 +457,7 @@
     enableDefectStep();
     enableSaveStep();
   }
+
   function enablePmoStep() {
     document.getElementById('step-pmo').classList.remove('disabled');
     document.getElementById('pmo-search').disabled = false;
@@ -484,7 +481,7 @@
     el.className = 'message' + (type ? ' ' + type : '');
   }
 
-/**
+  /**
    * ============================================================
    * Module 5: Select Part -> Select Defect -> Add multiple defects
    * ============================================================
@@ -492,8 +489,8 @@
 
   let partListCache = null;
   let defectListCache = null;
-  let selectedPart = null;   // currently highlighted part (before Add)
-  let selectedDefect = null; // currently highlighted defect (before Add)
+  let selectedPart = null;
+  let selectedDefect = null;
 
   function initDefectStep() {
     google.script.run
@@ -517,12 +514,8 @@
     defectInput.addEventListener('focus', function () { renderDefectDropdown(defectInput.value.trim().toLowerCase()); });
 
     document.addEventListener('click', function (event) {
-      if (!document.getElementById('part-combobox').contains(event.target)) {
-        partDropdown.classList.add('hidden');
-      }
-      if (!document.getElementById('defect-combobox').contains(event.target)) {
-        defectDropdown.classList.add('hidden');
-      }
+      if (!document.getElementById('part-combobox').contains(event.target)) partDropdown.classList.add('hidden');
+      if (!document.getElementById('defect-combobox').contains(event.target)) defectDropdown.classList.add('hidden');
     });
 
     document.getElementById('btn-add-defect').addEventListener('click', addDefectRow);
@@ -531,17 +524,14 @@
   function renderPartDropdown(filterText) {
     const dropdown = document.getElementById('part-dropdown');
     dropdown.innerHTML = '';
-
     if (!partListCache) {
       dropdown.innerHTML = '<div class="dropdown-empty">Loading parts...</div>';
       dropdown.classList.remove('hidden');
       return;
     }
-
     const matches = partListCache.filter(function (p) {
       return !filterText || String(p.PartName).toLowerCase().indexOf(filterText) !== -1;
     });
-
     if (matches.length === 0) {
       dropdown.innerHTML = '<div class="dropdown-empty">No matching parts.</div>';
     } else {
@@ -557,24 +547,20 @@
         dropdown.appendChild(item);
       });
     }
-
     dropdown.classList.remove('hidden');
   }
 
   function renderDefectDropdown(filterText) {
     const dropdown = document.getElementById('defect-dropdown');
     dropdown.innerHTML = '';
-
     if (!defectListCache) {
       dropdown.innerHTML = '<div class="dropdown-empty">Loading defects...</div>';
       dropdown.classList.remove('hidden');
       return;
     }
-
     const matches = defectListCache.filter(function (d) {
       return !filterText || String(d.DefectName).toLowerCase().indexOf(filterText) !== -1;
     });
-
     if (matches.length === 0) {
       dropdown.innerHTML = '<div class="dropdown-empty">No matching defects.</div>';
     } else {
@@ -590,68 +576,45 @@
         dropdown.appendChild(item);
       });
     }
-
     dropdown.classList.remove('hidden');
   }
 
-  /**
-   * Validates the current Part + Defect selection and, if valid,
-   * adds it as a new row to appState.defects. Blocks exact
-   * Part+Defect duplicates; the same Part or same Defect reused
-   * with a different partner is allowed.
-   */
   function addDefectRow() {
     if (!selectedPart || !selectedDefect) {
       showDefectMessage('Please select both a Part and a Defect.', 'error');
       return;
     }
-
     const isDuplicate = appState.defects.some(function (row) {
       return row.part === selectedPart.PartName && row.defect === selectedDefect.DefectName;
     });
-
     if (isDuplicate) {
       showDefectMessage('This Part + Defect combination is already added.', 'error');
       return;
     }
-
     appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName });
     renderDefectList();
     showDefectMessage('Defect added.', 'success');
-
-    // Reset selections so the next Add starts fresh.
     selectedPart = null;
     selectedDefect = null;
     document.getElementById('part-search').value = '';
     document.getElementById('defect-search').value = '';
   }
 
-  /**
-   * Removes a defect row by index and re-renders the list.
-   * @param {number} index - Index into appState.defects to remove.
-   */
   function removeDefectRow(index) {
     appState.defects.splice(index, 1);
     renderDefectList();
   }
 
-  /**
-   * Renders the current appState.defects list with a remove
-   * button on each row.
-   */
   function renderDefectList() {
     const container = document.getElementById('defect-list');
     container.innerHTML = '';
-
     appState.defects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
       item.innerHTML =
         '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
         '<button type="button" class="btn-remove">Remove</button>';
-      item.querySelector('.btn-remove').addEventListener('click', function () {
-        removeDefectRow(index);
-      });
+      item.querySelector('.btn-remove').addEventListener('click', function () { removeDefectRow(index); });
       container.appendChild(item);
     });
   }
@@ -685,8 +648,7 @@
     el.className = 'message' + (type ? ' ' + type : '');
   }
 
-
-/**
+  /**
    * ============================================================
    * Module 6a: Save (new ticket path - QR Lock was "Available")
    * ============================================================
@@ -750,7 +712,6 @@
       '<div class="result-row"><span class="result-label">Status:</span> ' + result.status + '</div>';
     box.classList.remove('hidden');
 
-    // Reset the whole form after a short pause so the operator can scan the next lock.
     setTimeout(resetWholeForm, 2000);
   }
 
@@ -760,10 +721,6 @@
     el.className = 'message' + (type ? ' ' + type : '');
   }
 
-  /**
-   * Resets every step back to its initial state, ready for the
-   * next QR Lock scan.
-   */
   function resetWholeForm() {
     document.getElementById('qr-result').classList.add('hidden');
     document.getElementById('ticket-history').classList.add('hidden');
@@ -771,7 +728,7 @@
     showQrMessage('', '');
     appState.qrLock = null;
 
-    disableEmployeeStep();  // cascades to PMO, Defects, Save
+    disableEmployeeStep();
     document.getElementById('step-continue').classList.add('hidden');
   }
 
@@ -785,12 +742,8 @@
     const checkerInput = document.getElementById('checker-search');
     const checkerDropdown = document.getElementById('checker-dropdown');
 
-    checkerInput.addEventListener('input', function () {
-      renderCheckerDropdown(checkerInput.value.trim().toLowerCase());
-    });
-    checkerInput.addEventListener('focus', function () {
-      renderCheckerDropdown(checkerInput.value.trim().toLowerCase());
-    });
+    checkerInput.addEventListener('input', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
+    checkerInput.addEventListener('focus', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
 
     const cPartInput = document.getElementById('continue-part-search');
     const cPartDropdown = document.getElementById('continue-part-dropdown');
@@ -812,14 +765,6 @@
     document.getElementById('btn-save-continue').addEventListener('click', submitContinueInspection);
   }
 
-  /**
-   * Sets up the Continue Inspection screen for the ticket currently
-   * assigned to an "In Use" lock: shows the previous round's open
-   * defects (defaulted to Unsolved) and resets the new-defect list.
-   *
-   * @param {Object} history - { ticket, inspections, defects } from getQRLockData().
-   * @param {string} qrLockId - The scanned QR Lock ID.
-   */
   function startContinueInspection(history, qrLockId) {
     if (!history.ticket) {
       showQrMessage('Lock is In Use but its ticket record could not be found.', 'error');
@@ -827,16 +772,14 @@
     }
 
     const currentRound = Number(history.ticket.CurrentRound) || 1;
-    const latestDefects = history.defects.filter(function (d) {
-      return Number(d.Round) === currentRound;
-    });
+    const latestDefects = history.defects.filter(function (d) { return Number(d.Round) === currentRound; });
 
     appState.continueData = {
       ticketNo: history.ticket.TicketNo,
       qrLockId: qrLockId,
       newRound: currentRound + 1,
-      previousDefects: latestDefects,          // [{Part, Defect, Round, ...}]
-      resolvedStates: latestDefects.map(function () { return 'unsolved'; }), // default Unsolved
+      previousDefects: latestDefects,
+      resolvedStates: latestDefects.map(function () { return 'unsolved'; }),
       checker: null,
       newDefects: []
     };
@@ -889,19 +832,16 @@
   function renderCheckerDropdown(filterText) {
     const dropdown = document.getElementById('checker-dropdown');
     dropdown.innerHTML = '';
-
     if (!employeeListCache) {
       dropdown.innerHTML = '<div class="dropdown-empty">Loading employees...</div>';
       dropdown.classList.remove('hidden');
       return;
     }
-
     const matches = employeeListCache.filter(function (emp) {
       const id = String(emp.EmployeeID).toLowerCase();
       const name = String(emp.EmployeeName).toLowerCase();
       return !filterText || id.indexOf(filterText) !== -1 || name.indexOf(filterText) !== -1;
     });
-
     if (matches.length === 0) {
       dropdown.innerHTML = '<div class="dropdown-empty">No matching employees.</div>';
     } else {
@@ -913,7 +853,6 @@
         dropdown.appendChild(item);
       });
     }
-
     dropdown.classList.remove('hidden');
   }
 
@@ -1008,20 +947,16 @@
       showContinueDefectMessage('Please select both a Part and a Defect.', 'error');
       return;
     }
-
     const isDuplicate = appState.continueData.newDefects.some(function (row) {
       return row.part === continueSelectedPart.PartName && row.defect === continueSelectedDefect.DefectName;
     });
-
     if (isDuplicate) {
       showContinueDefectMessage('This Part + Defect combination is already added.', 'error');
       return;
     }
-
     appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName });
     renderContinueNewDefectList();
     showContinueDefectMessage('Defect added.', 'success');
-
     continueSelectedPart = null;
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
@@ -1031,7 +966,6 @@
   function renderContinueNewDefectList() {
     const container = document.getElementById('continue-new-defect-list');
     container.innerHTML = '';
-
     appState.continueData.newDefects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
@@ -1082,12 +1016,8 @@
   }
 
   function onContinueSaved(result) {
-    showSaveContinueMessage(
-      'Round ' + result.round + ' saved - Result: ' + result.result + ', Ticket Status: ' + result.status + '.',
-      'success'
-    );
+    showSaveContinueMessage('Round ' + result.round + ' saved - Result: ' + result.result + ', Ticket Status: ' + result.status + '.', 'success');
     document.getElementById('btn-save-continue').disabled = false;
-
     setTimeout(resetWholeForm, 2000);
   }
 
@@ -1096,6 +1026,4 @@
     el.textContent = text;
     el.className = 'message' + (type ? ' ' + type : '');
   }
-
-
 </script>
