@@ -1,0 +1,300 @@
+/* ============================================================
+     QQR LOCK PROJECT — Stylesheet.html
+     Module 1: Base styles only.
+     This app is used on the production floor, primarily on
+     phones/tablets for QR scanning, so base styles are kept
+     simple, mobile-first, and touch-friendly.
+     ============================================================ */
+
+  /* Reset default margins/padding and use a consistent box model */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f4f6f8;
+    color: #1a1a1a;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #app-container {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background-color: #ffffff;
+  }
+
+  .app-header {
+    background-color: #1f2937;
+    color: #ffffff;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .app-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  #app-main {
+    padding: 16px;
+  }
+
+  .placeholder-text {
+    color: #6b7280;
+    text-align: center;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+
+  /* ---------------- Module 2: QR Scan step ---------------- */
+
+  .step-section {
+    margin-bottom: 24px;
+  }
+
+  .step-title {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #1f2937;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    display: inline-block;
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+
+  .btn-primary {
+    background-color: #2563eb;
+    color: #ffffff;
+  }
+
+  .btn-secondary {
+    background-color: #e5e7eb;
+    color: #1f2937;
+  }
+
+  #qr-reader {
+    width: 100%;
+    margin: 12px 0;
+  }
+
+  .manual-entry {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .manual-entry label {
+    display: block;
+    font-size: 13px;
+    color: #4b5563;
+    margin-bottom: 6px;
+  }
+
+  .manual-entry input {
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+
+  .message {
+    font-size: 13px;
+    min-height: 18px;
+    margin: 8px 0;
+  }
+
+  .message.error {
+    color: #dc2626;
+  }
+
+  .message.success {
+    color: #16a34a;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .result-box,
+  .history-box {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+    font-size: 14px;
+  }
+
+  .result-row {
+    padding: 4px 0;
+  }
+
+  .result-label {
+    font-weight: 600;
+    color: #374151;
+    display: inline-block;
+    width: 90px;
+  }
+
+  .history-box h3 {
+    font-size: 14px;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+
+  .history-box h4 {
+    font-size: 13px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    color: #4b5563;
+  }
+
+  .history-entry {
+    padding: 6px 0;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+  }
+
+  /* ---------------- Module 3: Employee ID combobox ---------------- */
+
+  .step-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .combobox {
+    position: relative;
+  }
+
+  .combobox input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+  }
+
+  .combobox input[type="text"]:disabled {
+    background-color: #f3f4f6;
+  }
+
+  .dropdown-list {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    z-index: 10;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  }
+
+  .dropdown-item {
+    padding: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .dropdown-item:last-child {
+    border-bottom: none;
+  }
+
+  .dropdown-item:hover,
+  .dropdown-item.active-highlight {
+    background-color: #eff6ff;
+  }
+
+  .dropdown-item .item-id {
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .dropdown-item .item-name {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .dropdown-empty {
+    padding: 10px;
+    font-size: 13px;
+    color: #9ca3af;
+  }
+
+  /* ---------------- Module 5: Part/Defect list ---------------- */
+
+  .defect-list {
+    margin-top: 12px;
+  }
+
+  .defect-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .defect-list-item .defect-item-text {
+    flex: 1;
+  }
+
+  .defect-list-item .btn-remove {
+    background-color: #fee2e2;
+    color: #dc2626;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+
+  /* ---------------- Module 6: Continue Inspection / Save ---------------- */
+
+  .sub-title {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 16px 0 8px;
+  }
+
+  .prev-defect-item {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .prev-defect-item .prev-defect-text {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .prev-defect-item label {
+    font-size: 13px;
+    margin-right: 16px;
+    cursor: pointer;
+  }
