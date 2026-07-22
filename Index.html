@@ -1,209 +1,1053 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <base target="_top">
-  <meta charset="utf-8">
-  <!-- Third-party camera QR scanning library (used in Module 2) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-  <!-- CSS is kept in a separate file (Stylesheet.html) and included below -->
-  <?!= include('Stylesheet'); ?>
-</head>
-<body>
+/**
+ * ============================================================
+ * QQR LOCK PROJECT — script.js
+ * Standalone static frontend, calls the Apps Script Web App as
+ * a JSON API (doPost) instead of using google.script.run, since
+ * this page runs as a normal top-level site (fixes camera
+ * permission issues caused by Apps Script's iframe wrapper).
+ * ============================================================
+ */
 
-  <!-- ==========================================================
-       Main App Container
-       Each workflow step (QR Scan, Employee ID, PMO, Part/Defect,
-       Save) will be built as its own section/module inside here
-       in later modules. For now this is just a placeholder shell.
-       ========================================================== -->
-  <div id="app-container">
-    <header class="app-header">
-      <h1>QQR Lock</h1>
-    </header>
+// TODO: Paste your Apps Script Web App URL here (must end in /exec).
+// Deploy -> Manage deployments -> copy the "Web app" URL.
+const API_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
 
-    <main id="app-main">
+/**
+ * Calls the Apps Script backend as a JSON API.
+ * Uses Content-Type: text/plain to avoid triggering a CORS
+ * preflight (OPTIONS) request, since Apps Script Web Apps
+ * cannot respond to preflight requests.
+ *
+ * @param {string} action - Name of the server-side function to run.
+ * @param {Object} [payload] - Optional arguments for that function.
+ * @return {Promise<Object>} The parsed JSON response.
+ */
+async function callApi(action, payload) {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: action, payload: payload || {} })
+  });
+  const data = await response.json();
+  if (data && data.error) {
+    throw new Error(data.error);
+  }
+  return data;
+}
 
-      <!-- ======================================================
-           STEP 1: QR Scan
-           Scans a QR Lock code and auto-retrieves Stage/Floor/Line
-           from QRLock_Master. If the lock is already "In Use",
-           the existing ticket's history is shown instead.
-           ====================================================== -->
-      <section id="step-qr-scan" class="step-section">
-        <h2 class="step-title">1. Scan QR Lock</h2>
+  /**
+   * ============================================================
+   * QQR LOCK PROJECT — JavaScript.html
+   * Module 1: Scaffold only.
+   * No workflow logic (QR scan, Employee lookup, PMO lookup,
+   * Save, etc.) is implemented yet. Those will be added in
+   * later modules.
+   * ============================================================
+   */
 
-        <button id="btn-start-scan" type="button" class="btn-primary">
-          Start Camera Scan
-        </button>
+  /**
+   * Runs once the DOM is fully loaded.
+   * Currently just confirms the page initialized correctly.
+   */
+  /**
+   * Shared state for the workflow, populated as the user completes
+   * each step. Later modules (PMO, Part/Defect, Save) will read from
+   * this object rather than re-fetching already-known data.
+   */
+  const appState = {
+    qrLock: null,   // result from getQRLockData()
+    employee: null, // selected employee record ({EmployeeID, EmployeeName, Department, Status})
+    pmo: null,      // selected PMO record ({PMO, Customer, File, Style, Color})
+    defects: [],    // list of added { part, defect } pairs (new ticket path)
+    continueData: null // { ticketNo, round, previousDefects, resolvedStates, checker, newDefects } (continue path)
+  };
 
-        <!-- html5-qrcode renders the camera preview into this div -->
-        <div id="qr-reader"></div>
+  document.addEventListener('DOMContentLoaded', function () {
+    console.log('QQR Lock app scaffold loaded.');
+    initQrScanStep();
+    initEmployeeStep();
+    initPmoStep();
+    initDefectStep();
+    initContinueStep();
+    initSaveStep();
+  });
 
-        <!-- Manual fallback entry, in case camera scan isn't available -->
-        <div class="manual-entry">
-          <label for="manual-qrlock-id">Or enter QR Lock ID manually:</label>
-          <input type="text" id="manual-qrlock-id" placeholder="e.g. QRL-0001">
-          <button id="btn-manual-lookup" type="button" class="btn-secondary">Lookup</button>
-        </div>
+  /**
+   * ============================================================
+   * Module 2: QR Scan -> Auto-retrieve Stage / Floor / Line
+   * ============================================================
+   */
 
-        <!-- Status/error messages for the scan step -->
-        <p id="qr-scan-message" class="message"></p>
+  // Holds the active html5-qrcode scanner instance so it can be stopped later.
+  let qrScanner = null;
 
-        <!-- Auto-retrieved Stage / Floor / Line display -->
-        <div id="qr-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">QR Lock ID:</span> <span id="res-qrlockid"></span></div>
-          <div class="result-row"><span class="result-label">Stage:</span> <span id="res-stage"></span></div>
-          <div class="result-row"><span class="result-label">Floor:</span> <span id="res-floor"></span></div>
-          <div class="result-row"><span class="result-label">Line:</span> <span id="res-line"></span></div>
-          <div class="result-row"><span class="result-label">Status:</span> <span id="res-status"></span></div>
-        </div>
+  /**
+   * Wires up all event listeners for the QR Scan step:
+   * the "Start Camera Scan" button and the manual entry fallback.
+   */
+  function initQrScanStep() {
+    document.getElementById('btn-start-scan')
+      .addEventListener('click', startCameraScan);
 
-        <!-- Shown only when the lock's Status is "In Use":
-             displays the existing ticket + its inspection/defect history -->
-        <div id="ticket-history" class="history-box hidden">
-          <h3>This lock is already In Use — existing ticket data:</h3>
-          <div id="history-ticket"></div>
-          <h4>Inspection History</h4>
-          <div id="history-inspections"></div>
-          <h4>Defect History</h4>
-          <div id="history-defects"></div>
-        </div>
-      </section>
+    document.getElementById('btn-manual-lookup')
+      .addEventListener('click', function () {
+        const manualId = document.getElementById('manual-qrlock-id').value.trim();
+        if (!manualId) {
+          showQrMessage('Please enter a QR Lock ID.', 'error');
+          return;
+        }
+        lookupQrLockId(manualId);
+      });
+  }
 
+  /**
+   * Starts the device camera and begins scanning for a QR code
+   * using the html5-qrcode library. Once a code is successfully
+   * decoded, the scanner stops and the code is looked up.
+   */
+  function startCameraScan() {
+    const readerElementId = 'qr-reader';
+    qrScanner = new Html5Qrcode(readerElementId);
 
-      <!-- ======================================================
-           CONTINUE INSPECTION (shown instead of Steps 2-5 when
-           the scanned lock's Status was "In Use"). Lets the user
-           mark each previous-round defect Solved/Unsolved, add
-           any newly found defects, then complete the round.
-           ====================================================== -->
-      <section id="step-continue" class="step-section hidden">
-        <h2 class="step-title">Continue Inspection (Round <span id="continue-round-num"></span>)</h2>
+    showQrMessage('Starting camera...', '');
 
-        <div class="combobox" id="checker-combobox">
-          <input type="text" id="checker-search" placeholder="Search Employee ID or Name (Checked By)..." autocomplete="off">
-          <div id="checker-dropdown" class="dropdown-list hidden"></div>
-        </div>
-        <p id="checker-message" class="message"></p>
-        <div id="checker-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">Employee ID:</span> <span id="res-checker-id"></span></div>
-          <div class="result-row"><span class="result-label">Name:</span> <span id="res-checker-name"></span></div>
-        </div>
+    qrScanner.start(
+      { facingMode: 'environment' }, // prefer rear camera
+      { fps: 10, qrbox: 250 },
+      function onScanSuccess(decodedText) {
+        stopCameraScan();
+        lookupQrLockId(decodedText);
+      },
+      function onScanFailure() {
+        // Called continuously while no QR code is detected yet.
+        // Intentionally left empty - not an error state.
+      }
+    ).catch(function (err) {
+      showQrMessage('Could not start camera: ' + err, 'error');
+    });
+  }
 
-        <h3 class="sub-title">Previous Defects — Mark Solved / Unsolved</h3>
-        <div id="previous-defects-list"></div>
+  /**
+   * Stops the active camera scanner, if running.
+   */
+  function stopCameraScan() {
+    if (qrScanner) {
+      qrScanner.stop().catch(function () { /* already stopped */ });
+    }
+  }
 
-        <h3 class="sub-title">Add New Defect (if any found)</h3>
-        <div class="combobox" id="continue-part-combobox">
-          <input type="text" id="continue-part-search" placeholder="Search Part..." autocomplete="off">
-          <div id="continue-part-dropdown" class="dropdown-list hidden"></div>
-        </div>
-        <div class="combobox" id="continue-defect-combobox" style="margin-top:8px;">
-          <input type="text" id="continue-defect-search" placeholder="Search Defect..." autocomplete="off">
-          <div id="continue-defect-dropdown" class="dropdown-list hidden"></div>
-        </div>
-        <button id="btn-continue-add-defect" type="button" class="btn-secondary" style="margin-top:8px;">Add New Defect</button>
-        <p id="continue-defect-message" class="message"></p>
-        <div id="continue-new-defect-list" class="defect-list"></div>
+  /**
+   * Calls the server-side getQRLockData() function for the given
+   * QR Lock ID and renders the result (or an error message).
+   *
+   * @param {string} qrLockId - The scanned or manually entered QR Lock ID.
+   */
+  function lookupQrLockId(qrLockId) {
+    showQrMessage('Looking up "' + qrLockId + '"...', '');
 
-        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Complete Round</button>
-        <p id="save-continue-message" class="message"></p>
-      </section>
+    callApi('getQRLockData', { qrLockId: qrLockId })
+      .then(onQrLockDataReceived)
+      .catch(function (err) {
+        showQrMessage('Error: ' + err.message, 'error');
+      });
+  }
 
-      <!-- ======================================================
-           STEP 2: Enter Employee ID
-           Searchable dropdown over Employee_Master. Auto-retrieves
-           Employee Name on selection. Disabled until the QR Lock
-           step completes with Status = "Available". Blocks with
-           an error if the selected employee's Status isn't Active.
-           ====================================================== -->
-      <section id="step-employee" class="step-section disabled">
-        <h2 class="step-title">2. Enter Employee ID</h2>
+  /**
+   * Handles the response from getQRLockData(): displays Stage/Floor/Line,
+   * and if the lock is already in use, renders the existing ticket history.
+   *
+   * @param {Object} data - Result object returned from the server.
+   */
+  function onQrLockDataReceived(data) {
+    appState.qrLock = data.found ? data : null;
 
-        <div class="combobox" id="employee-combobox">
-          <input type="text" id="employee-search" placeholder="Search Employee ID or Name..." autocomplete="off" disabled>
-          <div id="employee-dropdown" class="dropdown-list hidden"></div>
-        </div>
+    if (!data.found) {
+      showQrMessage(data.message, 'error');
+      document.getElementById('qr-result').classList.add('hidden');
+      document.getElementById('ticket-history').classList.add('hidden');
+      disableEmployeeStep();
+      return;
+    }
 
-        <p id="employee-message" class="message"></p>
+    showQrMessage('QR Lock found.', 'success');
 
-        <div id="employee-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">Employee ID:</span> <span id="res-empid"></span></div>
-          <div class="result-row"><span class="result-label">Name:</span> <span id="res-empname"></span></div>
-        </div>
-      </section>
+    document.getElementById('res-qrlockid').textContent = data.qrLockId;
+    document.getElementById('res-stage').textContent = data.stage;
+    document.getElementById('res-floor').textContent = data.floor;
+    document.getElementById('res-line').textContent = data.line;
+    document.getElementById('res-status').textContent = data.status;
+    document.getElementById('qr-result').classList.remove('hidden');
 
-      <!-- ======================================================
-           STEP 3: Enter PMO
-           Searchable dropdown over PMO_Master. Auto-retrieves
-           Customer / File / Style / Color on selection. Disabled
-           until a valid Active employee is confirmed in Step 2.
-           ====================================================== -->
-      <section id="step-pmo" class="step-section disabled">
-        <h2 class="step-title">3. Enter PMO</h2>
+    if (data.status === 'In Use' && data.ticketHistory) {
+      renderTicketHistory(data.ticketHistory);
+      document.getElementById('ticket-history').classList.remove('hidden');
+    } else {
+      document.getElementById('ticket-history').classList.add('hidden');
+    }
 
-        <div class="combobox" id="pmo-combobox">
-          <input type="text" id="pmo-search" placeholder="Search PMO..." autocomplete="off" disabled>
-          <div id="pmo-dropdown" class="dropdown-list hidden"></div>
-        </div>
+    // Only a lock that is currently "Available" can move on to
+    // creating a new ticket; "In Use" moves into Continue Inspection.
+    if (data.status === 'Available') {
+      document.getElementById('step-continue').classList.add('hidden');
+      enableEmployeeStep();
+    } else if (data.status === 'In Use' && data.ticketHistory) {
+      disableEmployeeStep();
+      startContinueInspection(data.ticketHistory, data.qrLockId);
+    } else {
+      document.getElementById('step-continue').classList.add('hidden');
+      disableEmployeeStep();
+    }
+  }
 
-        <p id="pmo-message" class="message"></p>
+  /**
+   * Renders the existing ticket's Ticket_Master record plus its
+   * related Inspection_History and Defect_History rows into the
+   * #ticket-history section.
+   *
+   * @param {Object} history - { ticket, inspections, defects }
+   */
+  function renderTicketHistory(history) {
+    const ticketDiv = document.getElementById('history-ticket');
+    ticketDiv.innerHTML = '';
+    if (history.ticket) {
+      Object.keys(history.ticket).forEach(function (key) {
+        const row = document.createElement('div');
+        row.className = 'history-entry';
+        row.textContent = key + ': ' + history.ticket[key];
+        ticketDiv.appendChild(row);
+      });
+    }
 
-        <div id="pmo-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">PMO:</span> <span id="res-pmo"></span></div>
-          <div class="result-row"><span class="result-label">Customer:</span> <span id="res-customer"></span></div>
-          <div class="result-row"><span class="result-label">File:</span> <span id="res-file"></span></div>
-          <div class="result-row"><span class="result-label">Style:</span> <span id="res-style"></span></div>
-          <div class="result-row"><span class="result-label">Color:</span> <span id="res-color"></span></div>
-        </div>
-      </section>
+    const inspectionsDiv = document.getElementById('history-inspections');
+    inspectionsDiv.innerHTML = '';
+    if (history.inspections.length === 0) {
+      inspectionsDiv.innerHTML = '<div class="history-entry">No inspection records yet.</div>';
+    } else {
+      history.inspections.forEach(function (row) {
+        const el = document.createElement('div');
+        el.className = 'history-entry';
+        el.textContent = 'Round ' + row.Round + ' - ' + row.Result +
+          ' (by ' + row.CheckedByEmployeeName + ' on ' + row.InspectionDateTime + ')';
+        inspectionsDiv.appendChild(el);
+      });
+    }
 
+    const defectsDiv = document.getElementById('history-defects');
+    defectsDiv.innerHTML = '';
+    if (history.defects.length === 0) {
+      defectsDiv.innerHTML = '<div class="history-entry">No defect records yet.</div>';
+    } else {
+      history.defects.forEach(function (row) {
+        const el = document.createElement('div');
+        el.className = 'history-entry';
+        el.textContent = 'Round ' + row.Round + ' - Part: ' + row.Part + ', Defect: ' + row.Defect;
+        defectsDiv.appendChild(el);
+      });
+    }
+  }
 
-      <!-- ======================================================
-           STEP 4: Select Part -> Select Defect -> Add
-           Searchable dropdowns over Part_Master / Defect_Master.
-           Each Add builds a row in a running list. Disabled until
-           a PMO is confirmed in Step 3. Exact Part+Defect
-           duplicates are blocked; same Part or same Defect reused
-           with a different partner is allowed.
-           ====================================================== -->
-      <section id="step-defects" class="step-section disabled">
-        <h2 class="step-title">4. Select Part &amp; Defect</h2>
+  /**
+   * Displays a short status/error message under the scan controls.
+   *
+   * @param {string} text - Message to display.
+   * @param {string} type - 'error', 'success', or '' for neutral.
+   */
+  function showQrMessage(text, type) {
+    const el = document.getElementById('qr-scan-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
 
-        <div class="combobox" id="part-combobox">
-          <input type="text" id="part-search" placeholder="Search Part..." autocomplete="off" disabled>
-          <div id="part-dropdown" class="dropdown-list hidden"></div>
-        </div>
+  /**
+   * ============================================================
+   * Module 3: Employee ID -> Auto-retrieve Employee Name
+   * ============================================================
+   */
 
-        <div class="combobox" id="defect-combobox" style="margin-top:8px;">
-          <input type="text" id="defect-search" placeholder="Search Defect..." autocomplete="off" disabled>
-          <div id="defect-dropdown" class="dropdown-list hidden"></div>
-        </div>
+  // Cached list of employees, fetched once from the server, used to
+  // power the client-side searchable dropdown without repeated calls.
+  let employeeListCache = null;
 
-        <button id="btn-add-defect" type="button" class="btn-primary" style="margin-top:8px;" disabled>
-          Add Defect
-        </button>
+  /**
+   * Wires up the Employee ID searchable dropdown: fetches the employee
+   * list in the background, and attaches input/click handlers for
+   * searching and selecting an employee.
+   */
+  function initEmployeeStep() {
+    // Fetch the employee list early so it's ready by the time
+    // this step becomes enabled.
+    callApi('getEmployeeList')
+      .then(function (list) { employeeListCache = list; })
+      .catch(function (err) { console.error('Failed to load employee list: ' + err.message); });
 
-        <p id="defect-message" class="message"></p>
+    const searchInput = document.getElementById('employee-search');
+    const dropdown = document.getElementById('employee-dropdown');
 
-        <div id="defect-list" class="defect-list"></div>
-      </section>
+    searchInput.addEventListener('input', function () {
+      renderEmployeeDropdown(searchInput.value.trim().toLowerCase());
+    });
 
+    searchInput.addEventListener('focus', function () {
+      renderEmployeeDropdown(searchInput.value.trim().toLowerCase());
+    });
 
-      <!-- ======================================================
-           STEP 5: Save (new ticket path only)
-           ====================================================== -->
-      <section id="step-save" class="step-section disabled">
-        <h2 class="step-title">5. Save</h2>
-        <button id="btn-save-ticket" type="button" class="btn-primary" disabled>Save Ticket</button>
-        <p id="save-message" class="message"></p>
-        <div id="save-result" class="result-box hidden"></div>
-      </section>
+    // Hide the dropdown when clicking elsewhere on the page.
+    document.addEventListener('click', function (event) {
+      if (!document.getElementById('employee-combobox').contains(event.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+  }
 
-    </main>
-  </div>
+  /**
+   * Filters the cached employee list by the given search text
+   * (matched against EmployeeID and EmployeeName) and renders the
+   * matching results into the dropdown list.
+   *
+   * @param {string} filterText - Lowercased search text.
+   */
+  function renderEmployeeDropdown(filterText) {
+    const dropdown = document.getElementById('employee-dropdown');
+    dropdown.innerHTML = '';
 
-  <!-- JS is kept in a separate file (JavaScript.html) and included below -->
-  <?!= include('JavaScript'); ?>
-</body>
-</html>
+    if (!employeeListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading employees...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+
+    const matches = employeeListCache.filter(function (emp) {
+      const id = String(emp.EmployeeID).toLowerCase();
+      const name = String(emp.EmployeeName).toLowerCase();
+      return !filterText || id.indexOf(filterText) !== -1 || name.indexOf(filterText) !== -1;
+    });
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching employees.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (emp) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML =
+          '<div class="item-id">' + emp.EmployeeID + '</div>' +
+          '<div class="item-name">' + emp.EmployeeName + '</div>';
+        item.addEventListener('click', function () {
+          selectEmployee(emp);
+        });
+        dropdown.appendChild(item);
+      });
+    }
+
+    dropdown.classList.remove('hidden');
+  }
+
+  /**
+   * Handles selection of an employee from the dropdown: auto-fills
+   * the Employee Name, and blocks the workflow with an error if the
+   * employee's Status is not "Active".
+   *
+   * @param {Object} emp - The selected employee record.
+   */
+  function selectEmployee(emp) {
+    document.getElementById('employee-search').value = emp.EmployeeID + ' - ' + emp.EmployeeName;
+    document.getElementById('employee-dropdown').classList.add('hidden');
+
+    if (emp.Status !== 'Active') {
+      showEmployeeMessage('Employee "' + emp.EmployeeID + '" is not Active (Status: ' + emp.Status + '). Cannot proceed.', 'error');
+      document.getElementById('employee-result').classList.add('hidden');
+      appState.employee = null;
+      disablePmoStep();
+      return;
+    }
+
+    showEmployeeMessage('Employee found.', 'success');
+    document.getElementById('res-empid').textContent = emp.EmployeeID;
+    document.getElementById('res-empname').textContent = emp.EmployeeName;
+    document.getElementById('employee-result').classList.remove('hidden');
+
+    appState.employee = emp;
+    enablePmoStep();
+  }
+
+  /**
+   * Enables the Employee ID step (called once the QR Lock step
+   * completes with Status = "Available").
+   */
+  function enableEmployeeStep() {
+    document.getElementById('step-employee').classList.remove('disabled');
+    document.getElementById('employee-search').disabled = false;
+  }
+
+  /**
+   * Disables and resets the Employee ID step (called when the QR
+   * Lock step hasn't completed, or the lock isn't "Available").
+   */
+  function disableEmployeeStep() {
+    const section = document.getElementById('step-employee');
+    section.classList.add('disabled');
+    document.getElementById('employee-search').disabled = true;
+    document.getElementById('employee-search').value = '';
+    document.getElementById('employee-dropdown').classList.add('hidden');
+    document.getElementById('employee-result').classList.add('hidden');
+    showEmployeeMessage('', '');
+    appState.employee = null;
+    disablePmoStep();
+  }
+
+  /**
+   * Displays a short status/error message under the Employee step.
+   *
+   * @param {string} text - Message to display.
+   * @param {string} type - 'error', 'success', or '' for neutral.
+   */
+  function showEmployeeMessage(text, type) {
+    const el = document.getElementById('employee-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  /**
+   * ============================================================
+   * Module 4: PMO -> Auto-retrieve Customer / File / Style / Color
+   * ============================================================
+   */
+
+  let pmoListCache = null;
+
+  function initPmoStep() {
+    callApi('getPmoList')
+      .then(function (list) { pmoListCache = list; })
+      .catch(function (err) { console.error('Failed to load PMO list: ' + err.message); });
+
+    const searchInput = document.getElementById('pmo-search');
+    const dropdown = document.getElementById('pmo-dropdown');
+
+    searchInput.addEventListener('input', function () {
+      renderPmoDropdown(searchInput.value.trim().toLowerCase());
+    });
+
+    searchInput.addEventListener('focus', function () {
+      renderPmoDropdown(searchInput.value.trim().toLowerCase());
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!document.getElementById('pmo-combobox').contains(event.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+  }
+
+  function renderPmoDropdown(filterText) {
+    const dropdown = document.getElementById('pmo-dropdown');
+    dropdown.innerHTML = '';
+
+    if (!pmoListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading PMOs...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+
+    const matches = pmoListCache.filter(function (p) {
+      const pmo = String(p.PMO).toLowerCase();
+      const customer = String(p.Customer).toLowerCase();
+      return !filterText || pmo.indexOf(filterText) !== -1 || customer.indexOf(filterText) !== -1;
+    });
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching PMOs.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (p) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML =
+          '<div class="item-id">' + p.PMO + '</div>' +
+          '<div class="item-name">' + p.Customer + ' - ' + p.Style + '</div>';
+        item.addEventListener('click', function () { selectPmo(p); });
+        dropdown.appendChild(item);
+      });
+    }
+
+    dropdown.classList.remove('hidden');
+  }
+
+  function selectPmo(p) {
+    document.getElementById('pmo-search').value = p.PMO;
+    document.getElementById('pmo-dropdown').classList.add('hidden');
+
+    showPmoMessage('PMO found.', 'success');
+    document.getElementById('res-pmo').textContent = p.PMO;
+    document.getElementById('res-customer').textContent = p.Customer;
+    document.getElementById('res-file').textContent = p.File;
+    document.getElementById('res-style').textContent = p.Style;
+    document.getElementById('res-color').textContent = p.Color;
+    document.getElementById('pmo-result').classList.remove('hidden');
+
+    appState.pmo = p;
+    enableDefectStep();
+    enableSaveStep();
+  }
+
+  function enablePmoStep() {
+    document.getElementById('step-pmo').classList.remove('disabled');
+    document.getElementById('pmo-search').disabled = false;
+  }
+
+  function disablePmoStep() {
+    document.getElementById('step-pmo').classList.add('disabled');
+    document.getElementById('pmo-search').disabled = true;
+    document.getElementById('pmo-search').value = '';
+    document.getElementById('pmo-dropdown').classList.add('hidden');
+    document.getElementById('pmo-result').classList.add('hidden');
+    showPmoMessage('', '');
+    appState.pmo = null;
+    disableDefectStep();
+    disableSaveStep();
+  }
+
+  function showPmoMessage(text, type) {
+    const el = document.getElementById('pmo-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  /**
+   * ============================================================
+   * Module 5: Select Part -> Select Defect -> Add multiple defects
+   * ============================================================
+   */
+
+  let partListCache = null;
+  let defectListCache = null;
+  let selectedPart = null;
+  let selectedDefect = null;
+
+  function initDefectStep() {
+    callApi('getPartList')
+      .then(function (list) { partListCache = list; })
+      .catch(function (err) { console.error('Failed to load part list: ' + err.message); });
+
+    callApi('getDefectList')
+      .then(function (list) { defectListCache = list; })
+      .catch(function (err) { console.error('Failed to load defect list: ' + err.message); });
+
+    const partInput = document.getElementById('part-search');
+    const partDropdown = document.getElementById('part-dropdown');
+    partInput.addEventListener('input', function () { renderPartDropdown(partInput.value.trim().toLowerCase()); });
+    partInput.addEventListener('focus', function () { renderPartDropdown(partInput.value.trim().toLowerCase()); });
+
+    const defectInput = document.getElementById('defect-search');
+    const defectDropdown = document.getElementById('defect-dropdown');
+    defectInput.addEventListener('input', function () { renderDefectDropdown(defectInput.value.trim().toLowerCase()); });
+    defectInput.addEventListener('focus', function () { renderDefectDropdown(defectInput.value.trim().toLowerCase()); });
+
+    document.addEventListener('click', function (event) {
+      if (!document.getElementById('part-combobox').contains(event.target)) partDropdown.classList.add('hidden');
+      if (!document.getElementById('defect-combobox').contains(event.target)) defectDropdown.classList.add('hidden');
+    });
+
+    document.getElementById('btn-add-defect').addEventListener('click', addDefectRow);
+  }
+
+  function renderPartDropdown(filterText) {
+    const dropdown = document.getElementById('part-dropdown');
+    dropdown.innerHTML = '';
+    if (!partListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading parts...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    const matches = partListCache.filter(function (p) {
+      return !filterText || String(p.PartName).toLowerCase().indexOf(filterText) !== -1;
+    });
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching parts.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (p) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<div class="item-id">' + p.PartName + '</div>';
+        item.addEventListener('click', function () {
+          selectedPart = p;
+          document.getElementById('part-search').value = p.PartName;
+          dropdown.classList.add('hidden');
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    dropdown.classList.remove('hidden');
+  }
+
+  function renderDefectDropdown(filterText) {
+    const dropdown = document.getElementById('defect-dropdown');
+    dropdown.innerHTML = '';
+    if (!defectListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading defects...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    const matches = defectListCache.filter(function (d) {
+      return !filterText || String(d.DefectName).toLowerCase().indexOf(filterText) !== -1;
+    });
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching defects.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (d) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<div class="item-id">' + d.DefectName + '</div>';
+        item.addEventListener('click', function () {
+          selectedDefect = d;
+          document.getElementById('defect-search').value = d.DefectName;
+          dropdown.classList.add('hidden');
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    dropdown.classList.remove('hidden');
+  }
+
+  function addDefectRow() {
+    if (!selectedPart || !selectedDefect) {
+      showDefectMessage('Please select both a Part and a Defect.', 'error');
+      return;
+    }
+    const isDuplicate = appState.defects.some(function (row) {
+      return row.part === selectedPart.PartName && row.defect === selectedDefect.DefectName;
+    });
+    if (isDuplicate) {
+      showDefectMessage('This Part + Defect combination is already added.', 'error');
+      return;
+    }
+    appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName });
+    renderDefectList();
+    showDefectMessage('Defect added.', 'success');
+    selectedPart = null;
+    selectedDefect = null;
+    document.getElementById('part-search').value = '';
+    document.getElementById('defect-search').value = '';
+  }
+
+  function removeDefectRow(index) {
+    appState.defects.splice(index, 1);
+    renderDefectList();
+  }
+
+  function renderDefectList() {
+    const container = document.getElementById('defect-list');
+    container.innerHTML = '';
+    appState.defects.forEach(function (row, index) {
+      const item = document.createElement('div');
+      item.className = 'defect-list-item';
+      item.innerHTML =
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
+        '<button type="button" class="btn-remove">Remove</button>';
+      item.querySelector('.btn-remove').addEventListener('click', function () { removeDefectRow(index); });
+      container.appendChild(item);
+    });
+  }
+
+  function enableDefectStep() {
+    document.getElementById('step-defects').classList.remove('disabled');
+    document.getElementById('part-search').disabled = false;
+    document.getElementById('defect-search').disabled = false;
+    document.getElementById('btn-add-defect').disabled = false;
+  }
+
+  function disableDefectStep() {
+    document.getElementById('step-defects').classList.add('disabled');
+    document.getElementById('part-search').disabled = true;
+    document.getElementById('defect-search').disabled = true;
+    document.getElementById('btn-add-defect').disabled = true;
+    document.getElementById('part-search').value = '';
+    document.getElementById('defect-search').value = '';
+    document.getElementById('part-dropdown').classList.add('hidden');
+    document.getElementById('defect-dropdown').classList.add('hidden');
+    selectedPart = null;
+    selectedDefect = null;
+    appState.defects = [];
+    renderDefectList();
+    showDefectMessage('', '');
+  }
+
+  function showDefectMessage(text, type) {
+    const el = document.getElementById('defect-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  /**
+   * ============================================================
+   * Module 6a: Save (new ticket path - QR Lock was "Available")
+   * ============================================================
+   */
+
+  function initSaveStep() {
+    document.getElementById('btn-save-ticket').addEventListener('click', submitNewTicket);
+  }
+
+  function enableSaveStep() {
+    document.getElementById('step-save').classList.remove('disabled');
+    document.getElementById('btn-save-ticket').disabled = false;
+  }
+
+  function disableSaveStep() {
+    document.getElementById('step-save').classList.add('disabled');
+    document.getElementById('btn-save-ticket').disabled = true;
+    document.getElementById('save-result').classList.add('hidden');
+    showSaveMessage('', '');
+  }
+
+  function submitNewTicket() {
+    if (!appState.qrLock || !appState.employee || !appState.pmo) {
+      showSaveMessage('Please complete Steps 1-3 first.', 'error');
+      return;
+    }
+
+    const payload = {
+      qrLockId: appState.qrLock.qrLockId,
+      stage: appState.qrLock.stage,
+      floor: appState.qrLock.floor,
+      line: appState.qrLock.line,
+      employeeId: appState.employee.EmployeeID,
+      employeeName: appState.employee.EmployeeName,
+      pmo: appState.pmo.PMO,
+      customer: appState.pmo.Customer,
+      file: appState.pmo.File,
+      style: appState.pmo.Style,
+      color: appState.pmo.Color,
+      defects: appState.defects
+    };
+
+    document.getElementById('btn-save-ticket').disabled = true;
+    showSaveMessage('Saving...', '');
+
+    callApi('saveNewTicket', payload)
+      .then(onNewTicketSaved)
+      .catch(function (err) {
+        showSaveMessage('Error: ' + err.message, 'error');
+        document.getElementById('btn-save-ticket').disabled = false;
+      });
+  }
+
+  function onNewTicketSaved(result) {
+    showSaveMessage('Saved successfully.', 'success');
+    const box = document.getElementById('save-result');
+    box.innerHTML =
+      '<div class="result-row"><span class="result-label">Ticket No:</span> ' + result.ticketNo + '</div>' +
+      '<div class="result-row"><span class="result-label">Result:</span> ' + result.result + '</div>' +
+      '<div class="result-row"><span class="result-label">Status:</span> ' + result.status + '</div>';
+    box.classList.remove('hidden');
+
+    setTimeout(resetWholeForm, 2000);
+  }
+
+  function showSaveMessage(text, type) {
+    const el = document.getElementById('save-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  function resetWholeForm() {
+    document.getElementById('qr-result').classList.add('hidden');
+    document.getElementById('ticket-history').classList.add('hidden');
+    document.getElementById('manual-qrlock-id').value = '';
+    showQrMessage('', '');
+    appState.qrLock = null;
+
+    disableEmployeeStep();
+    document.getElementById('step-continue').classList.add('hidden');
+  }
+
+  /**
+   * ============================================================
+   * Module 6b: Continue Inspection (QR Lock was "In Use")
+   * ============================================================
+   */
+
+  function initContinueStep() {
+    const checkerInput = document.getElementById('checker-search');
+    const checkerDropdown = document.getElementById('checker-dropdown');
+
+    checkerInput.addEventListener('input', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
+    checkerInput.addEventListener('focus', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
+
+    const cPartInput = document.getElementById('continue-part-search');
+    const cPartDropdown = document.getElementById('continue-part-dropdown');
+    cPartInput.addEventListener('input', function () { renderContinuePartDropdown(cPartInput.value.trim().toLowerCase()); });
+    cPartInput.addEventListener('focus', function () { renderContinuePartDropdown(cPartInput.value.trim().toLowerCase()); });
+
+    const cDefectInput = document.getElementById('continue-defect-search');
+    const cDefectDropdown = document.getElementById('continue-defect-dropdown');
+    cDefectInput.addEventListener('input', function () { renderContinueDefectDropdown(cDefectInput.value.trim().toLowerCase()); });
+    cDefectInput.addEventListener('focus', function () { renderContinueDefectDropdown(cDefectInput.value.trim().toLowerCase()); });
+
+    document.addEventListener('click', function (event) {
+      if (!document.getElementById('checker-combobox').contains(event.target)) checkerDropdown.classList.add('hidden');
+      if (!document.getElementById('continue-part-combobox').contains(event.target)) cPartDropdown.classList.add('hidden');
+      if (!document.getElementById('continue-defect-combobox').contains(event.target)) cDefectDropdown.classList.add('hidden');
+    });
+
+    document.getElementById('btn-continue-add-defect').addEventListener('click', addContinueDefectRow);
+    document.getElementById('btn-save-continue').addEventListener('click', submitContinueInspection);
+  }
+
+  function startContinueInspection(history, qrLockId) {
+    if (!history.ticket) {
+      showQrMessage('Lock is In Use but its ticket record could not be found.', 'error');
+      return;
+    }
+
+    const currentRound = Number(history.ticket.CurrentRound) || 1;
+    const latestDefects = history.defects.filter(function (d) { return Number(d.Round) === currentRound; });
+
+    appState.continueData = {
+      ticketNo: history.ticket.TicketNo,
+      qrLockId: qrLockId,
+      newRound: currentRound + 1,
+      previousDefects: latestDefects,
+      resolvedStates: latestDefects.map(function () { return 'unsolved'; }),
+      checker: null,
+      newDefects: []
+    };
+
+    document.getElementById('continue-round-num').textContent = appState.continueData.newRound;
+    document.getElementById('checker-search').value = '';
+    document.getElementById('checker-result').classList.add('hidden');
+    showCheckerMessage('', '');
+
+    renderPreviousDefectsList();
+
+    appState.continueData.newDefects = [];
+    document.getElementById('continue-part-search').value = '';
+    document.getElementById('continue-defect-search').value = '';
+    renderContinueNewDefectList();
+    showContinueDefectMessage('', '');
+    showSaveContinueMessage('', '');
+
+    document.getElementById('step-continue').classList.remove('hidden');
+  }
+
+  function renderPreviousDefectsList() {
+    const container = document.getElementById('previous-defects-list');
+    container.innerHTML = '';
+
+    if (appState.continueData.previousDefects.length === 0) {
+      container.innerHTML = '<div class="dropdown-empty">No open defects from the previous round.</div>';
+      return;
+    }
+
+    appState.continueData.previousDefects.forEach(function (d, index) {
+      const item = document.createElement('div');
+      item.className = 'prev-defect-item';
+      const groupName = 'prevdef_' + index;
+      item.innerHTML =
+        '<span class="prev-defect-text">Part: ' + d.Part + ' | Defect: ' + d.Defect + '</span>' +
+        '<label><input type="radio" name="' + groupName + '" value="solved"> Solved</label>' +
+        '<label><input type="radio" name="' + groupName + '" value="unsolved" checked> Unsolved</label>';
+
+      item.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          appState.continueData.resolvedStates[index] = radio.value;
+        });
+      });
+
+      container.appendChild(item);
+    });
+  }
+
+  function renderCheckerDropdown(filterText) {
+    const dropdown = document.getElementById('checker-dropdown');
+    dropdown.innerHTML = '';
+    if (!employeeListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading employees...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    const matches = employeeListCache.filter(function (emp) {
+      const id = String(emp.EmployeeID).toLowerCase();
+      const name = String(emp.EmployeeName).toLowerCase();
+      return !filterText || id.indexOf(filterText) !== -1 || name.indexOf(filterText) !== -1;
+    });
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching employees.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (emp) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<div class="item-id">' + emp.EmployeeID + '</div><div class="item-name">' + emp.EmployeeName + '</div>';
+        item.addEventListener('click', function () { selectChecker(emp); });
+        dropdown.appendChild(item);
+      });
+    }
+    dropdown.classList.remove('hidden');
+  }
+
+  function selectChecker(emp) {
+    document.getElementById('checker-search').value = emp.EmployeeID + ' - ' + emp.EmployeeName;
+    document.getElementById('checker-dropdown').classList.add('hidden');
+
+    if (emp.Status !== 'Active') {
+      showCheckerMessage('Employee "' + emp.EmployeeID + '" is not Active. Cannot proceed.', 'error');
+      document.getElementById('checker-result').classList.add('hidden');
+      appState.continueData.checker = null;
+      return;
+    }
+
+    showCheckerMessage('Employee found.', 'success');
+    document.getElementById('res-checker-id').textContent = emp.EmployeeID;
+    document.getElementById('res-checker-name').textContent = emp.EmployeeName;
+    document.getElementById('checker-result').classList.remove('hidden');
+
+    appState.continueData.checker = emp;
+  }
+
+  function showCheckerMessage(text, type) {
+    const el = document.getElementById('checker-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  function renderContinuePartDropdown(filterText) {
+    const dropdown = document.getElementById('continue-part-dropdown');
+    dropdown.innerHTML = '';
+    if (!partListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading parts...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    const matches = partListCache.filter(function (p) {
+      return !filterText || String(p.PartName).toLowerCase().indexOf(filterText) !== -1;
+    });
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching parts.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (p) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<div class="item-id">' + p.PartName + '</div>';
+        item.addEventListener('click', function () {
+          continueSelectedPart = p;
+          document.getElementById('continue-part-search').value = p.PartName;
+          dropdown.classList.add('hidden');
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    dropdown.classList.remove('hidden');
+  }
+
+  function renderContinueDefectDropdown(filterText) {
+    const dropdown = document.getElementById('continue-defect-dropdown');
+    dropdown.innerHTML = '';
+    if (!defectListCache) {
+      dropdown.innerHTML = '<div class="dropdown-empty">Loading defects...</div>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    const matches = defectListCache.filter(function (d) {
+      return !filterText || String(d.DefectName).toLowerCase().indexOf(filterText) !== -1;
+    });
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No matching defects.</div>';
+    } else {
+      matches.slice(0, 50).forEach(function (d) {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<div class="item-id">' + d.DefectName + '</div>';
+        item.addEventListener('click', function () {
+          continueSelectedDefect = d;
+          document.getElementById('continue-defect-search').value = d.DefectName;
+          dropdown.classList.add('hidden');
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    dropdown.classList.remove('hidden');
+  }
+
+  let continueSelectedPart = null;
+  let continueSelectedDefect = null;
+
+  function addContinueDefectRow() {
+    if (!continueSelectedPart || !continueSelectedDefect) {
+      showContinueDefectMessage('Please select both a Part and a Defect.', 'error');
+      return;
+    }
+    const isDuplicate = appState.continueData.newDefects.some(function (row) {
+      return row.part === continueSelectedPart.PartName && row.defect === continueSelectedDefect.DefectName;
+    });
+    if (isDuplicate) {
+      showContinueDefectMessage('This Part + Defect combination is already added.', 'error');
+      return;
+    }
+    appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName });
+    renderContinueNewDefectList();
+    showContinueDefectMessage('Defect added.', 'success');
+    continueSelectedPart = null;
+    continueSelectedDefect = null;
+    document.getElementById('continue-part-search').value = '';
+    document.getElementById('continue-defect-search').value = '';
+  }
+
+  function renderContinueNewDefectList() {
+    const container = document.getElementById('continue-new-defect-list');
+    container.innerHTML = '';
+    appState.continueData.newDefects.forEach(function (row, index) {
+      const item = document.createElement('div');
+      item.className = 'defect-list-item';
+      item.innerHTML =
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
+        '<button type="button" class="btn-remove">Remove</button>';
+      item.querySelector('.btn-remove').addEventListener('click', function () {
+        appState.continueData.newDefects.splice(index, 1);
+        renderContinueNewDefectList();
+      });
+      container.appendChild(item);
+    });
+  }
+
+  function showContinueDefectMessage(text, type) {
+    const el = document.getElementById('continue-defect-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
+
+  function submitContinueInspection() {
+    if (!appState.continueData.checker) {
+      showSaveContinueMessage('Please select the checking employee.', 'error');
+      return;
+    }
+
+    const payload = {
+      ticketNo: appState.continueData.ticketNo,
+      qrLockId: appState.continueData.qrLockId,
+      employeeId: appState.continueData.checker.EmployeeID,
+      employeeName: appState.continueData.checker.EmployeeName,
+      resolvedDefects: appState.continueData.previousDefects.map(function (d, index) {
+        return { part: d.Part, defect: d.Defect, solved: appState.continueData.resolvedStates[index] === 'solved' };
+      }),
+      newDefects: appState.continueData.newDefects
+    };
+
+    document.getElementById('btn-save-continue').disabled = true;
+    showSaveContinueMessage('Saving...', '');
+
+    callApi('saveContinueInspection', payload)
+      .then(onContinueSaved)
+      .catch(function (err) {
+        showSaveContinueMessage('Error: ' + err.message, 'error');
+        document.getElementById('btn-save-continue').disabled = false;
+      });
+  }
+
+  function onContinueSaved(result) {
+    showSaveContinueMessage('Round ' + result.round + ' saved - Result: ' + result.result + ', Ticket Status: ' + result.status + '.', 'success');
+    document.getElementById('btn-save-continue').disabled = false;
+    setTimeout(resetWholeForm, 2000);
+  }
+
+  function showSaveContinueMessage(text, type) {
+    const el = document.getElementById('save-continue-message');
+    el.textContent = text;
+    el.className = 'message' + (type ? ' ' + type : '');
+  }
