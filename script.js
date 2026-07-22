@@ -10,7 +10,7 @@
 
 // TODO: Paste your Apps Script Web App URL here (must end in /exec).
 // Deploy -> Manage deployments -> copy the "Web app" URL.
-const API_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbynh9HSSphJ5JhsaLlXVlmhI1NP2ICpqQdDlsBMfL0mheBsg2FmssVcExYlOmwF8y0L/exec';
 
 /**
  * Calls the Apps Script backend as a JSON API.
