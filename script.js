@@ -10,7 +10,7 @@
 
 // TODO: Paste your Apps Script Web App URL here (must end in /exec).
 // Deploy -> Manage deployments -> copy the "Web app" URL.
-const API_URL = 'https://script.google.com/macros/s/AKfycbyaZvY1hiNv7KXXrtp0hHKyt54DEn9lsuGwivJmpZw7jyToS889kKolFf-J0iyBP_AD/exec';
+const API_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
 
 /**
  * Calls the Apps Script backend as a JSON API.
@@ -165,17 +165,16 @@ async function callApi(action, payload) {
       showQrMessage(data.message, 'error');
       document.getElementById('qr-result').classList.add('hidden');
       document.getElementById('ticket-history').classList.add('hidden');
+      document.getElementById('new-ticket-flow').classList.add('hidden');
       disableEmployeeStep();
       return;
     }
 
-    showQrMessage('QR Lock found.', 'success');
+    showQrMessage(data.qrLockId + ' Lock is ' + data.status, 'success');
 
-    document.getElementById('res-qrlockid').textContent = data.qrLockId;
     document.getElementById('res-stage').textContent = data.stage;
     document.getElementById('res-floor').textContent = data.floor;
     document.getElementById('res-line').textContent = data.line;
-    document.getElementById('res-status').textContent = data.status;
     document.getElementById('qr-result').classList.remove('hidden');
 
     if (data.status === 'In Use' && data.ticketHistory) {
@@ -185,37 +184,38 @@ async function callApi(action, payload) {
       document.getElementById('ticket-history').classList.add('hidden');
     }
 
-    // Only a lock that is currently "Available" can move on to
-    // creating a new ticket; "In Use" moves into Continue Inspection.
+    // Only a lock that is currently "Available" shows Steps 2-5 (new
+    // ticket flow); "In Use" hides them and shows Continue Inspection.
     if (data.status === 'Available') {
       document.getElementById('step-continue').classList.add('hidden');
+      document.getElementById('new-ticket-flow').classList.remove('hidden');
       enableEmployeeStep();
     } else if (data.status === 'In Use' && data.ticketHistory) {
+      document.getElementById('new-ticket-flow').classList.add('hidden');
       disableEmployeeStep();
       startContinueInspection(data.ticketHistory, data.qrLockId);
     } else {
       document.getElementById('step-continue').classList.add('hidden');
+      document.getElementById('new-ticket-flow').classList.add('hidden');
       disableEmployeeStep();
     }
   }
 
   /**
-   * Renders the existing ticket's Ticket_Master record plus its
-   * related Inspection_History and Defect_History rows into the
-   * #ticket-history section.
+   * Renders the existing ticket's PMO/Customer/File/Style/Color/Round
+   * plus its related Inspection_History and Defect_History rows into
+   * the #ticket-history section (nested inside the QR result box).
    *
    * @param {Object} history - { ticket, inspections, defects }
    */
   function renderTicketHistory(history) {
-    const ticketDiv = document.getElementById('history-ticket');
-    ticketDiv.innerHTML = '';
     if (history.ticket) {
-      Object.keys(history.ticket).forEach(function (key) {
-        const row = document.createElement('div');
-        row.className = 'history-entry';
-        row.textContent = key + ': ' + history.ticket[key];
-        ticketDiv.appendChild(row);
-      });
+      document.getElementById('res-scan-pmo').textContent = history.ticket.PMO;
+      document.getElementById('res-scan-customer').textContent = history.ticket.Customer;
+      document.getElementById('res-scan-file').textContent = history.ticket.File;
+      document.getElementById('res-scan-style').textContent = history.ticket.Style;
+      document.getElementById('res-scan-color').textContent = history.ticket.Color;
+      document.getElementById('res-scan-round').textContent = history.ticket.CurrentRound;
     }
 
     const inspectionsDiv = document.getElementById('history-inspections');
@@ -756,6 +756,7 @@ async function callApi(action, payload) {
 
     disableEmployeeStep();
     document.getElementById('step-continue').classList.add('hidden');
+    document.getElementById('new-ticket-flow').classList.add('hidden');
   }
 
   /**
