@@ -298,3 +298,23 @@
     margin-right: 16px;
     cursor: pointer;
   }
+
+  /* ---------------- Status colors: Pass/Fail, Solved/Unsolved ---------------- */
+
+  .text-green {
+    color: #16a34a;
+    font-weight: 600;
+  }
+
+  .text-red {
+    color: #dc2626;
+    font-weight: 600;
+  }
+
+  .prev-defect-item.state-solved {
+    border-left: 4px solid #16a34a;
+  }
+
+  .prev-defect-item.state-unsolved {
+    border-left: 4px solid #dc2626;
+  }
