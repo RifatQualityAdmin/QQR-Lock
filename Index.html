@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <!-- Third-party camera QR scanning library (used in Module 2) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <!-- CSS is kept in a separate file (Stylesheet.html) and included below -->
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+  <!-- ==========================================================
+       Main App Container
+       Each workflow step (QR Scan, Employee ID, PMO, Part/Defect,
+       Save) will be built as its own section/module inside here
+       in later modules. For now this is just a placeholder shell.
+       ========================================================== -->
+  <div id="app-container">
+    <header class="app-header">
+      <h1>QQR Lock</h1>
+    </header>
+
+    <main id="app-main">
+
+      <!-- ======================================================
+           STEP 1: QR Scan
+           Scans a QR Lock code and auto-retrieves Stage/Floor/Line
+           from QRLock_Master. If the lock is already "In Use",
+           the existing ticket's history is shown instead.
+           ====================================================== -->
+      <section id="step-qr-scan" class="step-section">
+        <h2 class="step-title">1. Scan QR Lock</h2>
+
+        <button id="btn-start-scan" type="button" class="btn-primary">
+          Start Camera Scan
+        </button>
+
+        <!-- html5-qrcode renders the camera preview into this div -->
+        <div id="qr-reader"></div>
+
+        <!-- Manual fallback entry, in case camera scan isn't available -->
+        <div class="manual-entry">
+          <label for="manual-qrlock-id">Or enter QR Lock ID manually:</label>
+          <input type="text" id="manual-qrlock-id" placeholder="e.g. QRL-0001">
+          <button id="btn-manual-lookup" type="button" class="btn-secondary">Lookup</button>
+        </div>
+
+        <!-- Status/error messages for the scan step -->
+        <p id="qr-scan-message" class="message"></p>
+
+        <!-- Auto-retrieved Stage / Floor / Line display -->
+        <div id="qr-result" class="result-box hidden">
+          <div class="result-row"><span class="result-label">QR Lock ID:</span> <span id="res-qrlockid"></span></div>
+          <div class="result-row"><span class="result-label">Stage:</span> <span id="res-stage"></span></div>
+          <div class="result-row"><span class="result-label">Floor:</span> <span id="res-floor"></span></div>
+          <div class="result-row"><span class="result-label">Line:</span> <span id="res-line"></span></div>
+          <div class="result-row"><span class="result-label">Status:</span> <span id="res-status"></span></div>
+        </div>
+
+        <!-- Shown only when the lock's Status is "In Use":
+             displays the existing ticket + its inspection/defect history -->
+        <div id="ticket-history" class="history-box hidden">
+          <h3>This lock is already In Use — existing ticket data:</h3>
+          <div id="history-ticket"></div>
+          <h4>Inspection History</h4>
+          <div id="history-inspections"></div>
+          <h4>Defect History</h4>
+          <div id="history-defects"></div>
+        </div>
+      </section>
+
+
+      <!-- ======================================================
+           CONTINUE INSPECTION (shown instead of Steps 2-5 when
+           the scanned lock's Status was "In Use"). Lets the user
+           mark each previous-round defect Solved/Unsolved, add
+           any newly found defects, then complete the round.
+           ====================================================== -->
+      <section id="step-continue" class="step-section hidden">
+        <h2 class="step-title">Continue Inspection (Round <span id="continue-round-num"></span>)</h2>
+
+        <div class="combobox" id="checker-combobox">
+          <input type="text" id="checker-search" placeholder="Search Employee ID or Name (Checked By)..." autocomplete="off">
+          <div id="checker-dropdown" class="dropdown-list hidden"></div>
+        </div>
+        <p id="checker-message" class="message"></p>
+        <div id="checker-result" class="result-box hidden">
+          <div class="result-row"><span class="result-label">Employee ID:</span> <span id="res-checker-id"></span></div>
+          <div class="result-row"><span class="result-label">Name:</span> <span id="res-checker-name"></span></div>
+        </div>
+
+        <h3 class="sub-title">Previous Defects — Mark Solved / Unsolved</h3>
+        <div id="previous-defects-list"></div>
+
+        <h3 class="sub-title">Add New Defect (if any found)</h3>
+        <div class="combobox" id="continue-part-combobox">
+          <input type="text" id="continue-part-search" placeholder="Search Part..." autocomplete="off">
+          <div id="continue-part-dropdown" class="dropdown-list hidden"></div>
+        </div>
+        <div class="combobox" id="continue-defect-combobox" style="margin-top:8px;">
+          <input type="text" id="continue-defect-search" placeholder="Search Defect..." autocomplete="off">
+          <div id="continue-defect-dropdown" class="dropdown-list hidden"></div>
+        </div>
+        <button id="btn-continue-add-defect" type="button" class="btn-secondary" style="margin-top:8px;">Add New Defect</button>
+        <p id="continue-defect-message" class="message"></p>
+        <div id="continue-new-defect-list" class="defect-list"></div>
+
+        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Complete Round</button>
+        <p id="save-continue-message" class="message"></p>
+      </section>
+
+      <!-- ======================================================
+           STEP 2: Enter Employee ID
+           Searchable dropdown over Employee_Master. Auto-retrieves
+           Employee Name on selection. Disabled until the QR Lock
+           step completes with Status = "Available". Blocks with
+           an error if the selected employee's Status isn't Active.
+           ====================================================== -->
+      <section id="step-employee" class="step-section disabled">
+        <h2 class="step-title">2. Enter Employee ID</h2>
+
+        <div class="combobox" id="employee-combobox">
+          <input type="text" id="employee-search" placeholder="Search Employee ID or Name..." autocomplete="off" disabled>
+          <div id="employee-dropdown" class="dropdown-list hidden"></div>
+        </div>
+
+        <p id="employee-message" class="message"></p>
+
+        <div id="employee-result" class="result-box hidden">
+          <div class="result-row"><span class="result-label">Employee ID:</span> <span id="res-empid"></span></div>
+          <div class="result-row"><span class="result-label">Name:</span> <span id="res-empname"></span></div>
+        </div>
+      </section>
+
+      <!-- ======================================================
+           STEP 3: Enter PMO
+           Searchable dropdown over PMO_Master. Auto-retrieves
+           Customer / File / Style / Color on selection. Disabled
+           until a valid Active employee is confirmed in Step 2.
+           ====================================================== -->
+      <section id="step-pmo" class="step-section disabled">
+        <h2 class="step-title">3. Enter PMO</h2>
+
+        <div class="combobox" id="pmo-combobox">
+          <input type="text" id="pmo-search" placeholder="Search PMO..." autocomplete="off" disabled>
+          <div id="pmo-dropdown" class="dropdown-list hidden"></div>
+        </div>
+
+        <p id="pmo-message" class="message"></p>
+
+        <div id="pmo-result" class="result-box hidden">
+          <div class="result-row"><span class="result-label">PMO:</span> <span id="res-pmo"></span></div>
+          <div class="result-row"><span class="result-label">Customer:</span> <span id="res-customer"></span></div>
+          <div class="result-row"><span class="result-label">File:</span> <span id="res-file"></span></div>
+          <div class="result-row"><span class="result-label">Style:</span> <span id="res-style"></span></div>
+          <div class="result-row"><span class="result-label">Color:</span> <span id="res-color"></span></div>
+        </div>
+      </section>
+
+
+      <!-- ======================================================
+           STEP 4: Select Part -> Select Defect -> Add
+           Searchable dropdowns over Part_Master / Defect_Master.
+           Each Add builds a row in a running list. Disabled until
+           a PMO is confirmed in Step 3. Exact Part+Defect
+           duplicates are blocked; same Part or same Defect reused
+           with a different partner is allowed.
+           ====================================================== -->
+      <section id="step-defects" class="step-section disabled">
+        <h2 class="step-title">4. Select Part &amp; Defect</h2>
+
+        <div class="combobox" id="part-combobox">
+          <input type="text" id="part-search" placeholder="Search Part..." autocomplete="off" disabled>
+          <div id="part-dropdown" class="dropdown-list hidden"></div>
+        </div>
+
+        <div class="combobox" id="defect-combobox" style="margin-top:8px;">
+          <input type="text" id="defect-search" placeholder="Search Defect..." autocomplete="off" disabled>
+          <div id="defect-dropdown" class="dropdown-list hidden"></div>
+        </div>
+
+        <button id="btn-add-defect" type="button" class="btn-primary" style="margin-top:8px;" disabled>
+          Add Defect
+        </button>
+
+        <p id="defect-message" class="message"></p>
+
+        <div id="defect-list" class="defect-list"></div>
+      </section>
+
+
+      <!-- ======================================================
+           STEP 5: Save (new ticket path only)
+           ====================================================== -->
+      <section id="step-save" class="step-section disabled">
+        <h2 class="step-title">5. Save</h2>
+        <button id="btn-save-ticket" type="button" class="btn-primary" disabled>Save Ticket</button>
+        <p id="save-message" class="message"></p>
+        <div id="save-result" class="result-box hidden"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- JS is kept in a separate file (JavaScript.html) and included below -->
+  <?!= include('JavaScript'); ?>
+</body>
+</html>
