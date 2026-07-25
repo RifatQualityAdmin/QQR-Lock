@@ -521,7 +521,8 @@ function saveNewTicket(data) {
       TicketNo: ticketNo,
       Round: round,
       Part: d.part,
-      Defect: d.defect
+      Defect: d.defect,
+      CountInFTT: d.countInFTT ? 'Yes' : 'No'
     });
   });
 
@@ -559,7 +560,7 @@ function saveContinueInspection(data) {
 
   const unsolvedCarried = (data.resolvedDefects || [])
     .filter(function (d) { return !d.solved; })
-    .map(function (d) { return { part: d.part, defect: d.defect }; });
+    .map(function (d) { return { part: d.part, defect: d.defect, countInFTT: d.countInFTT }; });
 
   const combined = unsolvedCarried.concat(data.newDefects || []);
   const result = combined.length === 0 ? 'Pass' : 'Fail';
@@ -581,7 +582,8 @@ function saveContinueInspection(data) {
       TicketNo: data.ticketNo,
       Round: round,
       Part: d.part,
-      Defect: d.defect
+      Defect: d.defect,
+      CountInFTT: d.countInFTT ? 'Yes' : 'No'
     });
   });
 
