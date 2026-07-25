@@ -103,6 +103,10 @@
           <input type="text" id="continue-defect-search" placeholder="Search Defect..." autocomplete="off">
           <div id="continue-defect-dropdown" class="dropdown-list hidden"></div>
         </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="continue-defect-count-ftt">
+          Count in FTT? (tick for Major/Critical, leave unticked for Minor)
+        </label>
         <button id="btn-continue-add-defect" type="button" class="btn-secondary" style="margin-top:8px;">Add New Defect</button>
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
@@ -182,6 +186,11 @@
           <input type="text" id="defect-search" placeholder="Search Defect..." autocomplete="off" disabled>
           <div id="defect-dropdown" class="dropdown-list hidden"></div>
         </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="defect-count-ftt" disabled>
+          Count in FTT? (tick for Major/Critical, leave unticked for Minor)
+        </label>
 
         <button id="btn-add-defect" type="button" class="btn-primary" style="margin-top:8px;" disabled>
           Add Defect
