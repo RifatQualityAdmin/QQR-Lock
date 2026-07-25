@@ -10,7 +10,7 @@
 
 // TODO: Paste your Apps Script Web App URL here (must end in /exec).
 // Deploy -> Manage deployments -> copy the "Web app" URL.
-const API_URL = 'https://script.google.com/macros/s/AKfycbynh9HSSphJ5JhsaLlXVlmhI1NP2ICpqQdDlsBMfL0mheBsg2FmssVcExYlOmwF8y0L/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzFdTvY9vYa6-FlnRdZy_qth-9lROdeusGVY3Udc7GS3uz4ztptQm5xVui04n813gt_/exec';
 
 /**
  * Calls the Apps Script backend as a JSON API.
@@ -630,13 +630,15 @@ async function callApi(action, payload) {
       showDefectMessage('This Part + Defect combination is already added.', 'error');
       return;
     }
-    appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName });
+    const countInFTT = document.getElementById('defect-count-ftt').checked;
+    appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName, countInFTT: countInFTT });
     renderDefectList();
     showDefectMessage('Defect added.', 'success');
     selectedPart = null;
     selectedDefect = null;
     document.getElementById('part-search').value = '';
     document.getElementById('defect-search').value = '';
+    document.getElementById('defect-count-ftt').checked = false;
   }
 
   function removeDefectRow(index) {
@@ -650,8 +652,11 @@ async function callApi(action, payload) {
     appState.defects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
+      const fttClass = row.countInFTT ? 'text-red' : 'text-green';
+      const fttText = row.countInFTT ? 'Major/Critical - Counted in FTT' : 'Minor - Not counted in FTT';
       item.innerHTML =
-        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect +
+        ' &nbsp;|&nbsp; <span class="' + fttClass + '">' + fttText + '</span></span>' +
         '<button type="button" class="btn-remove">Remove</button>';
       item.querySelector('.btn-remove').addEventListener('click', function () { removeDefectRow(index); });
       container.appendChild(item);
@@ -662,6 +667,7 @@ async function callApi(action, payload) {
     document.getElementById('step-defects').classList.remove('disabled');
     document.getElementById('part-search').disabled = false;
     document.getElementById('defect-search').disabled = false;
+    document.getElementById('defect-count-ftt').disabled = false;
     document.getElementById('btn-add-defect').disabled = false;
   }
 
@@ -669,6 +675,8 @@ async function callApi(action, payload) {
     document.getElementById('step-defects').classList.add('disabled');
     document.getElementById('part-search').disabled = true;
     document.getElementById('defect-search').disabled = true;
+    document.getElementById('defect-count-ftt').disabled = true;
+    document.getElementById('defect-count-ftt').checked = false;
     document.getElementById('btn-add-defect').disabled = true;
     document.getElementById('part-search').value = '';
     document.getElementById('defect-search').value = '';
@@ -1010,13 +1018,15 @@ async function callApi(action, payload) {
       return;
     }
 
-    appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName });
+    const countInFTT = document.getElementById('continue-defect-count-ftt').checked;
+    appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName, countInFTT: countInFTT });
     renderContinueNewDefectList();
     showContinueDefectMessage('Defect added.', 'success');
     continueSelectedPart = null;
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
+    document.getElementById('continue-defect-count-ftt').checked = false;
   }
 
   function renderContinueNewDefectList() {
@@ -1025,8 +1035,11 @@ async function callApi(action, payload) {
     appState.continueData.newDefects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
+      const fttClass = row.countInFTT ? 'text-red' : 'text-green';
+      const fttText = row.countInFTT ? 'Major/Critical - Counted in FTT' : 'Minor - Not counted in FTT';
       item.innerHTML =
-        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect +
+        ' &nbsp;|&nbsp; <span class="' + fttClass + '">' + fttText + '</span></span>' +
         '<button type="button" class="btn-remove">Remove</button>';
       item.querySelector('.btn-remove').addEventListener('click', function () {
         appState.continueData.newDefects.splice(index, 1);
@@ -1054,7 +1067,12 @@ async function callApi(action, payload) {
       employeeId: appState.continueData.checker.EmployeeID,
       employeeName: appState.continueData.checker.EmployeeName,
       resolvedDefects: appState.continueData.previousDefects.map(function (d, index) {
-        return { part: d.Part, defect: d.Defect, solved: appState.continueData.resolvedStates[index] === 'solved' };
+        return {
+          part: d.Part,
+          defect: d.Defect,
+          countInFTT: d.CountInFTT === 'Yes',
+          solved: appState.continueData.resolvedStates[index] === 'solved'
+        };
       }),
       newDefects: appState.continueData.newDefects
     };
