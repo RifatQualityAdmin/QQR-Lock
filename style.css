@@ -318,3 +318,15 @@
   .prev-defect-item.state-unsolved {
     border-left: 4px solid #dc2626;
   }
+
+  .checkbox-label {
+    display: block;
+    font-size: 13px;
+    color: #4b5563;
+    margin-top: 8px;
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    margin-right: 6px;
+  }
