@@ -187,11 +187,6 @@
           <div id="defect-dropdown" class="dropdown-list hidden"></div>
         </div>
 
-        <label class="checkbox-label">
-          <input type="checkbox" id="defect-count-ftt" disabled>
-          Count as Lock
-        </label>
-
         <button id="btn-add-defect" type="button" class="btn-primary" style="margin-top:8px;" disabled>
           Add Defect
         </button>
@@ -202,10 +197,21 @@
       </section>
 
       <!-- ======================================================
-           STEP 5: Save (new ticket path only)
+           STEP 5: Count as Lock + Save (new ticket path only)
+           The Count as Lock field only appears (and is required)
+           if at least one defect was added in Step 4. It applies
+           to all defects added in this submission, and defaults
+           to "Yes" when shown.
            ====================================================== -->
       <section id="step-save" class="step-section disabled">
-        <h2 class="step-title">5. Save</h2>
+        <h2 class="step-title">5. Count as Lock</h2>
+
+        <div id="count-as-lock-field" class="hidden">
+          <label class="checkbox-label" style="cursor:default;">Count as Lock (applies to all defects added above):</label>
+          <label class="checkbox-label"><input type="radio" name="countAsLock" id="count-as-lock-yes" value="yes" checked> Yes</label>
+          <label class="checkbox-label"><input type="radio" name="countAsLock" id="count-as-lock-no" value="no"> No</label>
+        </div>
+
         <button id="btn-save-ticket" type="button" class="btn-primary" disabled>Save Ticket</button>
         <p id="save-message" class="message"></p>
         <div id="save-result" class="result-box hidden"></div>
