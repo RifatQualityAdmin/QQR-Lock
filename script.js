@@ -671,7 +671,8 @@ async function callApi(action, payload) {
       field.classList.remove('hidden');
     } else {
       field.classList.add('hidden');
-      document.getElementById('count-as-lock-yes').checked = true; // reset default
+      document.getElementById('count-as-lock-yes').checked = false;
+      document.getElementById('count-as-lock-no').checked = false;
     }
   }
 
@@ -734,9 +735,17 @@ async function callApi(action, payload) {
     }
 
     // Count as Lock is one decision covering every defect added in this
-    // submission - only relevant (and shown) if any defect was added.
-    const countAsLock = appState.defects.length > 0 &&
-      document.getElementById('count-as-lock-yes').checked;
+    // submission - only relevant (and shown/required) if any defect was added.
+    let countAsLock = false;
+    if (appState.defects.length > 0) {
+      const yesChecked = document.getElementById('count-as-lock-yes').checked;
+      const noChecked = document.getElementById('count-as-lock-no').checked;
+      if (!yesChecked && !noChecked) {
+        showSaveMessage('Please select Count as Lock (Yes/No).', 'error');
+        return;
+      }
+      countAsLock = yesChecked;
+    }
 
     const defectsWithFlag = appState.defects.map(function (d) {
       return { part: d.part, defect: d.defect, countInFTT: countAsLock };
@@ -861,6 +870,7 @@ async function callApi(action, payload) {
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
     renderContinueNewDefectList();
+    updateContinueCountAsLockVisibility();
     showContinueDefectMessage('', '');
     showSaveContinueMessage('', '');
 
@@ -1037,15 +1047,14 @@ async function callApi(action, payload) {
       return;
     }
 
-    const countInFTT = document.getElementById('continue-defect-count-ftt').checked;
-    appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName, countInFTT: countInFTT });
+    appState.continueData.newDefects.push({ part: continueSelectedPart.PartName, defect: continueSelectedDefect.DefectName });
     renderContinueNewDefectList();
     showContinueDefectMessage('Defect added.', 'success');
     continueSelectedPart = null;
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
-    document.getElementById('continue-defect-count-ftt').checked = false;
+    updateContinueCountAsLockVisibility();
   }
 
   function renderContinueNewDefectList() {
@@ -1054,18 +1063,33 @@ async function callApi(action, payload) {
     appState.continueData.newDefects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
-      const fttClass = row.countInFTT ? 'text-red' : 'text-green';
-      const fttText = row.countInFTT ? 'Major/Critical - Counted in FTT' : 'Minor - Not counted in FTT';
       item.innerHTML =
-        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect +
-        ' &nbsp;|&nbsp; <span class="' + fttClass + '">' + fttText + '</span></span>' +
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
         '<button type="button" class="btn-remove">Remove</button>';
       item.querySelector('.btn-remove').addEventListener('click', function () {
         appState.continueData.newDefects.splice(index, 1);
         renderContinueNewDefectList();
+        updateContinueCountAsLockVisibility();
       });
       container.appendChild(item);
     });
+  }
+
+  /**
+   * Shows the "Count as Lock" field (positioned right before Save Round)
+   * only when at least one NEW defect has been added this round -
+   * carried-forward unsolved defects already have their own value and
+   * don't need a fresh decision.
+   */
+  function updateContinueCountAsLockVisibility() {
+    const field = document.getElementById('continue-count-as-lock-field');
+    if (appState.continueData.newDefects.length > 0) {
+      field.classList.remove('hidden');
+    } else {
+      field.classList.add('hidden');
+      document.getElementById('continue-count-as-lock-yes').checked = false;
+      document.getElementById('continue-count-as-lock-no').checked = false;
+    }
   }
 
   function showContinueDefectMessage(text, type) {
@@ -1080,6 +1104,21 @@ async function callApi(action, payload) {
       return;
     }
 
+    let countAsLockForNew = null;
+    if (appState.continueData.newDefects.length > 0) {
+      const yesChecked = document.getElementById('continue-count-as-lock-yes').checked;
+      const noChecked = document.getElementById('continue-count-as-lock-no').checked;
+      if (!yesChecked && !noChecked) {
+        showSaveContinueMessage('Please select Count as Lock (Yes/No) for the new defect(s).', 'error');
+        return;
+      }
+      countAsLockForNew = yesChecked;
+    }
+
+    const newDefectsWithFlag = appState.continueData.newDefects.map(function (d) {
+      return { part: d.part, defect: d.defect, countInFTT: countAsLockForNew };
+    });
+
     const payload = {
       ticketNo: appState.continueData.ticketNo,
       qrLockId: appState.continueData.qrLockId,
@@ -1093,7 +1132,7 @@ async function callApi(action, payload) {
           solved: appState.continueData.resolvedStates[index] === 'solved'
         };
       }),
-      newDefects: appState.continueData.newDefects
+      newDefects: newDefectsWithFlag
     };
 
     document.getElementById('btn-save-continue').disabled = true;
