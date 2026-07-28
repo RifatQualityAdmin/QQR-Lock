@@ -10,7 +10,7 @@
 
 // TODO: Paste your Apps Script Web App URL here (must end in /exec).
 // Deploy -> Manage deployments -> copy the "Web app" URL.
-const API_URL = 'https://script.google.com/macros/s/AKfycbzFdTvY9vYa6-FlnRdZy_qth-9lROdeusGVY3Udc7GS3uz4ztptQm5xVui04n813gt_/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbys9YQs9R_tl3A4GKx9kmX_ueOrfWxE2zh5r4pze3hHX4icYogiH7_WvMbGchfD8mv6/exec';
 
 /**
  * Calls the Apps Script backend as a JSON API.
@@ -630,20 +630,20 @@ async function callApi(action, payload) {
       showDefectMessage('This Part + Defect combination is already added.', 'error');
       return;
     }
-    const countInFTT = document.getElementById('defect-count-ftt').checked;
-    appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName, countInFTT: countInFTT });
+    appState.defects.push({ part: selectedPart.PartName, defect: selectedDefect.DefectName });
     renderDefectList();
     showDefectMessage('Defect added.', 'success');
     selectedPart = null;
     selectedDefect = null;
     document.getElementById('part-search').value = '';
     document.getElementById('defect-search').value = '';
-    document.getElementById('defect-count-ftt').checked = false;
+    updateCountAsLockVisibility();
   }
 
   function removeDefectRow(index) {
     appState.defects.splice(index, 1);
     renderDefectList();
+    updateCountAsLockVisibility();
   }
 
   function renderDefectList() {
@@ -652,22 +652,33 @@ async function callApi(action, payload) {
     appState.defects.forEach(function (row, index) {
       const item = document.createElement('div');
       item.className = 'defect-list-item';
-      const fttClass = row.countInFTT ? 'text-red' : 'text-green';
-      const fttText = row.countInFTT ? 'Major/Critical - Counted in FTT' : 'Minor - Not counted in FTT';
       item.innerHTML =
-        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect +
-        ' &nbsp;|&nbsp; <span class="' + fttClass + '">' + fttText + '</span></span>' +
+        '<span class="defect-item-text">Part: ' + row.part + ' &nbsp;|&nbsp; Defect: ' + row.defect + '</span>' +
         '<button type="button" class="btn-remove">Remove</button>';
       item.querySelector('.btn-remove').addEventListener('click', function () { removeDefectRow(index); });
       container.appendChild(item);
     });
   }
 
+  /**
+   * Shows the Step 5 "Count as Lock" field only when at least one
+   * defect has been added in Step 4 - it's meaningless (and hidden)
+   * for a bag with zero defects, since that's an automatic Pass.
+   */
+  function updateCountAsLockVisibility() {
+    const field = document.getElementById('count-as-lock-field');
+    if (appState.defects.length > 0) {
+      field.classList.remove('hidden');
+    } else {
+      field.classList.add('hidden');
+      document.getElementById('count-as-lock-yes').checked = true; // reset default
+    }
+  }
+
   function enableDefectStep() {
     document.getElementById('step-defects').classList.remove('disabled');
     document.getElementById('part-search').disabled = false;
     document.getElementById('defect-search').disabled = false;
-    document.getElementById('defect-count-ftt').disabled = false;
     document.getElementById('btn-add-defect').disabled = false;
   }
 
@@ -675,8 +686,6 @@ async function callApi(action, payload) {
     document.getElementById('step-defects').classList.add('disabled');
     document.getElementById('part-search').disabled = true;
     document.getElementById('defect-search').disabled = true;
-    document.getElementById('defect-count-ftt').disabled = true;
-    document.getElementById('defect-count-ftt').checked = false;
     document.getElementById('btn-add-defect').disabled = true;
     document.getElementById('part-search').value = '';
     document.getElementById('defect-search').value = '';
@@ -686,6 +695,7 @@ async function callApi(action, payload) {
     selectedDefect = null;
     appState.defects = [];
     renderDefectList();
+    updateCountAsLockVisibility();
     showDefectMessage('', '');
   }
 
@@ -723,6 +733,15 @@ async function callApi(action, payload) {
       return;
     }
 
+    // Count as Lock is one decision covering every defect added in this
+    // submission - only relevant (and shown) if any defect was added.
+    const countAsLock = appState.defects.length > 0 &&
+      document.getElementById('count-as-lock-yes').checked;
+
+    const defectsWithFlag = appState.defects.map(function (d) {
+      return { part: d.part, defect: d.defect, countInFTT: countAsLock };
+    });
+
     const payload = {
       qrLockId: appState.qrLock.qrLockId,
       stage: appState.qrLock.stage,
@@ -735,7 +754,7 @@ async function callApi(action, payload) {
       file: appState.pmo.File,
       style: appState.pmo.Style,
       color: appState.pmo.Color,
-      defects: appState.defects
+      defects: defectsWithFlag
     };
 
     document.getElementById('btn-save-ticket').disabled = true;
