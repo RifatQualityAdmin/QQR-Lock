@@ -6,6 +6,10 @@
   <title>QQR Lock</title>
   <!-- Third-party camera QR scanning library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <!-- Fonts: Oswald (headings), Inter (body), IBM Plex Mono (IDs/dates) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <!-- Styles kept in a separate file -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -19,7 +23,15 @@
        ========================================================== -->
   <div id="app-container">
     <header class="app-header">
+      <div class="header-mark" aria-hidden="true">
+        <span class="corner corner-tl"></span>
+        <span class="corner corner-tr"></span>
+        <span class="corner corner-bl"></span>
+        <span class="corner corner-br"></span>
+      </div>
       <h1>QQR Lock</h1>
+      <p class="header-subtitle">Quality Checkpoint System</p>
+    </header>
     </header>
 
     <main id="app-main">
@@ -30,8 +42,8 @@
            from QRLock_Master. If the lock is already "In Use",
            the existing ticket's history is shown instead.
            ====================================================== -->
-      <section id="step-qr-scan" class="step-section">
-        <h2 class="step-title">1. Scan QR Lock</h2>
+      <section id="step-qr-scan" class="step-section numbered-step">
+        <h2 class="step-title">Scan QR Lock</h2>
 
         <button id="btn-start-scan" type="button" class="btn-primary">
           Start Camera Scan
@@ -103,15 +115,22 @@
           <input type="text" id="continue-defect-search" placeholder="Search Defect..." autocomplete="off">
           <div id="continue-defect-dropdown" class="dropdown-list hidden"></div>
         </div>
-        <label class="checkbox-label">
-          <input type="checkbox" id="continue-defect-count-ftt">
-          Count as Lock
-        </label>
         <button id="btn-continue-add-defect" type="button" class="btn-secondary" style="margin-top:8px;">Add New Defect</button>
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
 
-        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Save Round</button>
+        <!-- Shown only if a new defect was added this round; applies to
+             all newly added defects. Carried-forward unsolved defects
+             keep whatever value they were originally recorded with. -->
+        <div id="continue-count-as-lock-field" class="count-as-lock-field hidden">
+          <span class="count-as-lock-label">Count as Lock (applies to new defects added above):</span>
+          <div class="radio-row">
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-yes" value="yes"> Yes</label>
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-no" value="no"> No</label>
+          </div>
+        </div>
+
+        <button id="btn-save-continue" type="button" class="btn-primary">Save Round</button>
         <p id="save-continue-message" class="message"></p>
       </section>
 
@@ -130,8 +149,8 @@
            step completes with Status = "Available". Blocks with
            an error if the selected employee's Status isn't Active.
            ====================================================== -->
-      <section id="step-employee" class="step-section disabled">
-        <h2 class="step-title">2. Enter Employee ID</h2>
+      <section id="step-employee" class="step-section numbered-step disabled">
+        <h2 class="step-title">Enter Employee ID</h2>
 
         <div class="combobox" id="employee-combobox">
           <input type="text" id="employee-search" placeholder="Search Employee ID or Name..." autocomplete="off" disabled>
@@ -152,8 +171,8 @@
            Customer / File / Style / Color on selection. Disabled
            until a valid Active employee is confirmed in Step 2.
            ====================================================== -->
-      <section id="step-pmo" class="step-section disabled">
-        <h2 class="step-title">3. Enter PMO</h2>
+      <section id="step-pmo" class="step-section numbered-step disabled">
+        <h2 class="step-title">Enter PMO</h2>
 
         <div class="combobox" id="pmo-combobox">
           <input type="text" id="pmo-search" placeholder="Search PMO..." autocomplete="off" disabled>
@@ -174,8 +193,8 @@
       <!-- ======================================================
            STEP 4: Select Part -> Select Defect -> Add
            ====================================================== -->
-      <section id="step-defects" class="step-section disabled">
-        <h2 class="step-title">4. Select Part &amp; Defect</h2>
+      <section id="step-defects" class="step-section numbered-step disabled">
+        <h2 class="step-title">Select Part &amp; Defect</h2>
 
         <div class="combobox" id="part-combobox">
           <input type="text" id="part-search" placeholder="Search Part..." autocomplete="off" disabled>
@@ -200,16 +219,18 @@
            STEP 5: Count as Lock + Save (new ticket path only)
            The Count as Lock field only appears (and is required)
            if at least one defect was added in Step 4. It applies
-           to all defects added in this submission, and defaults
-           to "Yes" when shown.
+           to all defects added in this submission. No default is
+           pre-selected - the user must actively choose Yes or No.
            ====================================================== -->
-      <section id="step-save" class="step-section disabled">
-        <h2 class="step-title">5. Count as Lock</h2>
+      <section id="step-save" class="step-section numbered-step step-final disabled">
+        <h2 class="step-title">Count as Lock</h2>
 
-        <div id="count-as-lock-field" class="hidden">
-          <label class="checkbox-label" style="cursor:default;">Count as Lock (applies to all defects added above):</label>
-          <label class="checkbox-label"><input type="radio" name="countAsLock" id="count-as-lock-yes" value="yes" checked> Yes</label>
-          <label class="checkbox-label"><input type="radio" name="countAsLock" id="count-as-lock-no" value="no"> No</label>
+        <div id="count-as-lock-field" class="count-as-lock-field hidden">
+          <span class="count-as-lock-label">Count as Lock (applies to all defects added above):</span>
+          <div class="radio-row">
+            <label class="radio-pill"><input type="radio" name="countAsLock" id="count-as-lock-yes" value="yes"> Yes</label>
+            <label class="radio-pill"><input type="radio" name="countAsLock" id="count-as-lock-no" value="no"> No</label>
+          </div>
         </div>
 
         <button id="btn-save-ticket" type="button" class="btn-primary" disabled>Save Ticket</button>
