@@ -96,6 +96,20 @@
         <!-- Checked-by employee is auto-reused from Round 1 - not re-entered here -->
         <div id="continue-checker-info" class="result-box"></div>
 
+        <!-- Always shows the current Count as Lock status (carried forward
+             from the previous round), with a small Edit control to change
+             it if needed. Applies to any new defects added this round. -->
+        <div id="continue-count-as-lock-field" class="count-as-lock-field">
+          <div id="continue-count-as-lock-display" class="count-as-lock-display">
+            <span class="count-as-lock-label">Count as Lock Status: <strong id="continue-count-as-lock-value"></strong></span>
+            <button type="button" id="btn-edit-count-as-lock" class="btn-edit">Edit</button>
+          </div>
+          <div id="continue-count-as-lock-edit" class="radio-row hidden">
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-yes" value="yes"> Yes</label>
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-no" value="no"> No</label>
+          </div>
+        </div>
+
         <h3 class="sub-title">Previous Defects — Mark Solved / Unsolved</h3>
         <div id="previous-defects-list"></div>
 
@@ -111,17 +125,6 @@
         <button id="btn-continue-add-defect" type="button" class="btn-secondary" style="margin-top:8px;">Add New Defect</button>
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
-
-        <!-- Shown only if a new defect was added this round; pre-filled
-             with Round 1's Count as Lock decision by default, but the
-             user can still change it if this round's defect differs. -->
-        <div id="continue-count-as-lock-field" class="count-as-lock-field hidden">
-          <span class="count-as-lock-label">Count as Lock (applies to new defects added above):</span>
-          <div class="radio-row">
-            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-yes" value="yes"> Yes</label>
-            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-no" value="no"> No</label>
-          </div>
-        </div>
 
         <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Save Round</button>
         <p id="save-continue-message" class="message"></p>
