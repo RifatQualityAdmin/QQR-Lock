@@ -870,6 +870,9 @@ async function callApi(action, payload) {
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
     renderContinueNewDefectList();
+    document.getElementById('continue-count-as-lock-yes').checked = false;
+    document.getElementById('continue-count-as-lock-no').checked = false;
+    updateContinueCountAsLockVisibility();
     showContinueDefectMessage('', '');
     showSaveContinueMessage('', '');
 
@@ -1001,6 +1004,7 @@ async function callApi(action, payload) {
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
+    updateContinueCountAsLockVisibility();
   }
 
   function renderContinueNewDefectList() {
@@ -1015,9 +1019,35 @@ async function callApi(action, payload) {
       item.querySelector('.btn-remove').addEventListener('click', function () {
         appState.continueData.newDefects.splice(index, 1);
         renderContinueNewDefectList();
+        updateContinueCountAsLockVisibility();
       });
       container.appendChild(item);
     });
+  }
+
+  /**
+   * Shows the "Count as Lock" field only when at least one new defect
+   * has been added this round. Pre-fills it with Round 1's decision as
+   * a default (so the user usually doesn't need to touch it), but
+   * leaves it fully editable - and doesn't overwrite a choice the user
+   * already made if the field was already showing.
+   */
+  function updateContinueCountAsLockVisibility() {
+    const field = document.getElementById('continue-count-as-lock-field');
+    if (appState.continueData.newDefects.length > 0) {
+      field.classList.remove('hidden');
+      const yesEl = document.getElementById('continue-count-as-lock-yes');
+      const noEl = document.getElementById('continue-count-as-lock-no');
+      if (!yesEl.checked && !noEl.checked) {
+        if (appState.continueData.countInFTTForNewDefects) {
+          yesEl.checked = true;
+        } else {
+          noEl.checked = true;
+        }
+      }
+    } else {
+      field.classList.add('hidden');
+    }
   }
 
   function showContinueDefectMessage(text, type) {
@@ -1027,11 +1057,14 @@ async function callApi(action, payload) {
   }
 
   function submitContinueInspection() {
-    // Count as Lock for any new defects this round automatically reuses
-    // the decision made at Round 1 (stored in appState.continueData
-    // when this screen loaded) - not asked again here.
+    // Count as Lock for any new defects this round - defaults to
+    // Round 1's decision, but reflects any edit the user made.
+    const countAsLockForNew = appState.continueData.newDefects.length > 0
+      ? document.getElementById('continue-count-as-lock-yes').checked
+      : appState.continueData.countInFTTForNewDefects;
+
     const newDefectsWithFlag = appState.continueData.newDefects.map(function (d) {
-      return { part: d.part, defect: d.defect, countInFTT: appState.continueData.countInFTTForNewDefects };
+      return { part: d.part, defect: d.defect, countInFTT: countAsLockForNew };
     });
 
     const payload = {
