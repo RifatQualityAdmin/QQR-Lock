@@ -233,12 +233,23 @@ async function callApi(action, payload) {
       });
     }
 
-    // A defect row is "Unsolved" only if it belongs to the ticket's
-    // current round AND the ticket is still Open - any older-round
-    // row, or any row once the ticket is Closed, is "Solved" (since
-    // still-outstanding items are always re-added into the newest round).
+    // A Part+Defect's true status depends on the LAST round it appears
+    // in (not each row's own round) - a defect carried forward as
+    // unsolved shows up again in a later round, and every occurrence of
+    // it must agree: still Unsolved everywhere until the round it stops
+    // being carried forward, from which point every occurrence shows
+    // Solved (and the round it was resolved in).
     const currentRound = history.ticket ? Number(history.ticket.CurrentRound) : null;
     const ticketOpen = history.ticket && history.ticket.Status === 'Open';
+
+    const lastRoundByKey = {};
+    history.defects.forEach(function (d) {
+      const key = d.Part + '||' + d.Defect;
+      const r = Number(d.Round);
+      if (!(key in lastRoundByKey) || r > lastRoundByKey[key]) {
+        lastRoundByKey[key] = r;
+      }
+    });
 
     const defectsDiv = document.getElementById('history-defects');
     defectsDiv.innerHTML = '';
@@ -248,9 +259,11 @@ async function callApi(action, payload) {
       history.defects.forEach(function (row) {
         const el = document.createElement('div');
         el.className = 'history-entry';
-        const isUnsolved = ticketOpen && Number(row.Round) === currentRound;
+        const key = row.Part + '||' + row.Defect;
+        const lastRound = lastRoundByKey[key];
+        const isUnsolved = ticketOpen && lastRound === currentRound;
         const statusClass = isUnsolved ? 'text-red' : 'text-green';
-        const statusText = isUnsolved ? 'Unsolved' : 'Solved';
+        const statusText = isUnsolved ? 'Unsolved' : ('Solved (Round ' + (lastRound + 1) + ')');
         el.innerHTML = 'Round ' + row.Round + ' - Part: ' + row.Part + ', Defect: ' + row.Defect +
           ' - <span class="' + statusClass + '">' + statusText + '</span>';
         defectsDiv.appendChild(el);
@@ -832,6 +845,13 @@ async function callApi(action, payload) {
 
     document.getElementById('btn-continue-add-defect').addEventListener('click', addContinueDefectRow);
     document.getElementById('btn-save-continue').addEventListener('click', submitContinueInspection);
+    document.getElementById('btn-edit-count-as-lock').addEventListener('click', function () {
+      document.getElementById('continue-count-as-lock-display').classList.add('hidden');
+      document.getElementById('continue-count-as-lock-edit').classList.remove('hidden');
+      const wantsYes = appState.continueData.countAsLockStatus;
+      document.getElementById('continue-count-as-lock-yes').checked = wantsYes;
+      document.getElementById('continue-count-as-lock-no').checked = !wantsYes;
+    });
   }
 
   function startContinueInspection(history, qrLockId) {
@@ -843,10 +863,22 @@ async function callApi(action, payload) {
     const currentRound = Number(history.ticket.CurrentRound) || 1;
     const latestDefects = history.defects.filter(function (d) { return Number(d.Round) === currentRound; });
 
-    // Employee ID and Count as Lock are only entered at Round 1 - reused
-    // automatically here rather than asked again on later rounds.
-    const round1Defect = history.defects.find(function (d) { return Number(d.Round) === 1; });
-    const round1CountInFTT = round1Defect ? (round1Defect.CountInFTT === 'Yes') : false;
+    // Employee ID is only entered at Round 1 - reused automatically here.
+    // Count as Lock status carries forward round-to-round: read it from
+    // the most recent Inspection_History row (CountInFTTStatus). Falls
+    // back to Round 1's Defect_History CountInFTT for older tickets
+    // saved before this column existed.
+    const inspectionsSorted = history.inspections.slice().sort(function (a, b) {
+      return Number(a.Round) - Number(b.Round);
+    });
+    const latestInspection = inspectionsSorted[inspectionsSorted.length - 1];
+    let currentCountAsLockStatus;
+    if (latestInspection && (latestInspection.CountInFTTStatus === 'Yes' || latestInspection.CountInFTTStatus === 'No')) {
+      currentCountAsLockStatus = latestInspection.CountInFTTStatus === 'Yes';
+    } else {
+      const round1Defect = history.defects.find(function (d) { return Number(d.Round) === 1; });
+      currentCountAsLockStatus = round1Defect ? (round1Defect.CountInFTT === 'Yes') : false;
+    }
 
     appState.continueData = {
       ticketNo: history.ticket.TicketNo,
@@ -855,7 +887,7 @@ async function callApi(action, payload) {
       previousDefects: latestDefects,
       resolvedStates: latestDefects.map(function () { return 'unsolved'; }),
       checker: { EmployeeID: history.ticket.EmployeeID, EmployeeName: history.ticket.EmployeeName },
-      countInFTTForNewDefects: round1CountInFTT,
+      countAsLockStatus: currentCountAsLockStatus,
       newDefects: []
     };
 
@@ -870,9 +902,12 @@ async function callApi(action, payload) {
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
     renderContinueNewDefectList();
-    document.getElementById('continue-count-as-lock-yes').checked = false;
-    document.getElementById('continue-count-as-lock-no').checked = false;
-    updateContinueCountAsLockVisibility();
+
+    // Always show the carried-forward status, collapsed (not in edit mode).
+    document.getElementById('continue-count-as-lock-value').textContent = currentCountAsLockStatus ? 'Yes' : 'No';
+    document.getElementById('continue-count-as-lock-display').classList.remove('hidden');
+    document.getElementById('continue-count-as-lock-edit').classList.add('hidden');
+
     showContinueDefectMessage('', '');
     showSaveContinueMessage('', '');
 
@@ -1004,7 +1039,6 @@ async function callApi(action, payload) {
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
-    updateContinueCountAsLockVisibility();
   }
 
   function renderContinueNewDefectList() {
@@ -1019,35 +1053,9 @@ async function callApi(action, payload) {
       item.querySelector('.btn-remove').addEventListener('click', function () {
         appState.continueData.newDefects.splice(index, 1);
         renderContinueNewDefectList();
-        updateContinueCountAsLockVisibility();
       });
       container.appendChild(item);
     });
-  }
-
-  /**
-   * Shows the "Count as Lock" field only when at least one new defect
-   * has been added this round. Pre-fills it with Round 1's decision as
-   * a default (so the user usually doesn't need to touch it), but
-   * leaves it fully editable - and doesn't overwrite a choice the user
-   * already made if the field was already showing.
-   */
-  function updateContinueCountAsLockVisibility() {
-    const field = document.getElementById('continue-count-as-lock-field');
-    if (appState.continueData.newDefects.length > 0) {
-      field.classList.remove('hidden');
-      const yesEl = document.getElementById('continue-count-as-lock-yes');
-      const noEl = document.getElementById('continue-count-as-lock-no');
-      if (!yesEl.checked && !noEl.checked) {
-        if (appState.continueData.countInFTTForNewDefects) {
-          yesEl.checked = true;
-        } else {
-          noEl.checked = true;
-        }
-      }
-    } else {
-      field.classList.add('hidden');
-    }
   }
 
   function showContinueDefectMessage(text, type) {
@@ -1057,14 +1065,16 @@ async function callApi(action, payload) {
   }
 
   function submitContinueInspection() {
-    // Count as Lock for any new defects this round - defaults to
-    // Round 1's decision, but reflects any edit the user made.
-    const countAsLockForNew = appState.continueData.newDefects.length > 0
+    // Count as Lock status always carries forward round-to-round. If the
+    // user clicked Edit and changed it, read the edited radio value;
+    // otherwise use the carried-forward value shown on screen.
+    const isEditing = !document.getElementById('continue-count-as-lock-edit').classList.contains('hidden');
+    const countAsLockStatus = isEditing
       ? document.getElementById('continue-count-as-lock-yes').checked
-      : appState.continueData.countInFTTForNewDefects;
+      : appState.continueData.countAsLockStatus;
 
     const newDefectsWithFlag = appState.continueData.newDefects.map(function (d) {
-      return { part: d.part, defect: d.defect, countInFTT: countAsLockForNew };
+      return { part: d.part, defect: d.defect, countInFTT: countAsLockStatus };
     });
 
     const payload = {
