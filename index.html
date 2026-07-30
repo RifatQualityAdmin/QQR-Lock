@@ -30,7 +30,7 @@
         <span class="corner corner-br"></span>
       </div>
       <h1>QQR Lock</h1>
-      <p class="header-subtitle">Digital Defect Tracking & Rework</p>
+      <p class="header-subtitle">Quality Checkpoint System</p>
     </header>
     </header>
 
@@ -93,15 +93,8 @@
       <section id="step-continue" class="step-section hidden">
         <h2 class="step-title">Continue Inspection (Round <span id="continue-round-num"></span>)</h2>
 
-        <div class="combobox" id="checker-combobox">
-          <input type="text" id="checker-search" placeholder="Search Employee ID or Name (Checked By)..." autocomplete="off">
-          <div id="checker-dropdown" class="dropdown-list hidden"></div>
-        </div>
-        <p id="checker-message" class="message"></p>
-        <div id="checker-result" class="result-box hidden">
-          <div class="result-row"><span class="result-label">Employee ID:</span> <span id="res-checker-id"></span></div>
-          <div class="result-row"><span class="result-label">Name:</span> <span id="res-checker-name"></span></div>
-        </div>
+        <!-- Checked-by employee is auto-reused from Round 1 - not re-entered here -->
+        <div id="continue-checker-info" class="result-box"></div>
 
         <h3 class="sub-title">Previous Defects — Mark Solved / Unsolved</h3>
         <div id="previous-defects-list"></div>
@@ -119,18 +112,7 @@
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
 
-        <!-- Shown only if a new defect was added this round; applies to
-             all newly added defects. Carried-forward unsolved defects
-             keep whatever value they were originally recorded with. -->
-        <div id="continue-count-as-lock-field" class="count-as-lock-field hidden">
-          <span class="count-as-lock-label">Count as Lock (applies to new defects added above):</span>
-          <div class="radio-row">
-            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-yes" value="yes"> Yes</label>
-            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-no" value="no"> No</label>
-          </div>
-        </div>
-
-        <button id="btn-save-continue" type="button" class="btn-primary">Save Round</button>
+        <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Save Round</button>
         <p id="save-continue-message" class="message"></p>
       </section>
 
