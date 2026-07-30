@@ -112,6 +112,17 @@
         <p id="continue-defect-message" class="message"></p>
         <div id="continue-new-defect-list" class="defect-list"></div>
 
+        <!-- Shown only if a new defect was added this round; pre-filled
+             with Round 1's Count as Lock decision by default, but the
+             user can still change it if this round's defect differs. -->
+        <div id="continue-count-as-lock-field" class="count-as-lock-field hidden">
+          <span class="count-as-lock-label">Count as Lock (applies to new defects added above):</span>
+          <div class="radio-row">
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-yes" value="yes"> Yes</label>
+            <label class="radio-pill"><input type="radio" name="continueCountAsLock" id="continue-count-as-lock-no" value="no"> No</label>
+          </div>
+        </div>
+
         <button id="btn-save-continue" type="button" class="btn-primary" style="margin-top:16px;">Save Round</button>
         <p id="save-continue-message" class="message"></p>
       </section>
@@ -198,16 +209,18 @@
       </section>
 
       <!-- ======================================================
-           STEP 5: Count as Lock + Save (new ticket path only)
-           The Count as Lock field only appears (and is required)
-           if at least one defect was added in Step 4. It applies
-           to all defects added in this submission. No default is
+           STEP 5: Save (new ticket path only)
+           The Save Ticket button is always available (a bag with
+           zero defects should still be saveable as a Pass). The
+           "Count as Lock" title and field only appear once at
+           least one defect has been added in Step 4, and apply to
+           all defects added in this submission. No default is
            pre-selected - the user must actively choose Yes or No.
            ====================================================== -->
       <section id="step-save" class="step-section numbered-step step-final disabled">
-        <h2 class="step-title">Count as Lock</h2>
 
         <div id="count-as-lock-field" class="count-as-lock-field hidden">
+          <h2 class="step-title" style="margin-bottom:12px;">Count as Lock</h2>
           <span class="count-as-lock-label">Count as Lock (applies to all defects added above):</span>
           <div class="radio-row">
             <label class="radio-pill"><input type="radio" name="countAsLock" id="count-as-lock-yes" value="yes"> Yes</label>
