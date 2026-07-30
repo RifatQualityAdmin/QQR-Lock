@@ -777,7 +777,8 @@ async function callApi(action, payload) {
       file: appState.pmo.File,
       style: appState.pmo.Style,
       color: appState.pmo.Color,
-      defects: defectsWithFlag
+      defects: defectsWithFlag,
+      countAsLockStatus: countAsLock
     };
 
     document.getElementById('btn-save-ticket').disabled = true;
