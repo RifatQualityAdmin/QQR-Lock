@@ -719,6 +719,7 @@ async function callApi(action, payload) {
   function enableSaveStep() {
     document.getElementById('step-save').classList.remove('disabled');
     document.getElementById('btn-save-ticket').disabled = false;
+    updateCountAsLockVisibility();
   }
 
   function disableSaveStep() {
@@ -814,12 +815,6 @@ async function callApi(action, payload) {
    */
 
   function initContinueStep() {
-    const checkerInput = document.getElementById('checker-search');
-    const checkerDropdown = document.getElementById('checker-dropdown');
-
-    checkerInput.addEventListener('input', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
-    checkerInput.addEventListener('focus', function () { renderCheckerDropdown(checkerInput.value.trim().toLowerCase()); });
-
     const cPartInput = document.getElementById('continue-part-search');
     const cPartDropdown = document.getElementById('continue-part-dropdown');
     cPartInput.addEventListener('input', function () { renderContinuePartDropdown(cPartInput.value.trim().toLowerCase()); });
@@ -831,7 +826,6 @@ async function callApi(action, payload) {
     cDefectInput.addEventListener('focus', function () { renderContinueDefectDropdown(cDefectInput.value.trim().toLowerCase()); });
 
     document.addEventListener('click', function (event) {
-      if (!document.getElementById('checker-combobox').contains(event.target)) checkerDropdown.classList.add('hidden');
       if (!document.getElementById('continue-part-combobox').contains(event.target)) cPartDropdown.classList.add('hidden');
       if (!document.getElementById('continue-defect-combobox').contains(event.target)) cDefectDropdown.classList.add('hidden');
     });
@@ -849,20 +843,26 @@ async function callApi(action, payload) {
     const currentRound = Number(history.ticket.CurrentRound) || 1;
     const latestDefects = history.defects.filter(function (d) { return Number(d.Round) === currentRound; });
 
+    // Employee ID and Count as Lock are only entered at Round 1 - reused
+    // automatically here rather than asked again on later rounds.
+    const round1Defect = history.defects.find(function (d) { return Number(d.Round) === 1; });
+    const round1CountInFTT = round1Defect ? (round1Defect.CountInFTT === 'Yes') : false;
+
     appState.continueData = {
       ticketNo: history.ticket.TicketNo,
       qrLockId: qrLockId,
       newRound: currentRound + 1,
       previousDefects: latestDefects,
       resolvedStates: latestDefects.map(function () { return 'unsolved'; }),
-      checker: null,
+      checker: { EmployeeID: history.ticket.EmployeeID, EmployeeName: history.ticket.EmployeeName },
+      countInFTTForNewDefects: round1CountInFTT,
       newDefects: []
     };
 
     document.getElementById('continue-round-num').textContent = appState.continueData.newRound;
-    document.getElementById('checker-search').value = '';
-    document.getElementById('checker-result').classList.add('hidden');
-    showCheckerMessage('', '');
+    document.getElementById('continue-checker-info').innerHTML =
+      '<div class="result-row"><span class="result-label">Checked By:</span> ' +
+      appState.continueData.checker.EmployeeID + ' - ' + appState.continueData.checker.EmployeeName + '</div>';
 
     renderPreviousDefectsList();
 
@@ -870,7 +870,6 @@ async function callApi(action, payload) {
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
     renderContinueNewDefectList();
-    updateContinueCountAsLockVisibility();
     showContinueDefectMessage('', '');
     showSaveContinueMessage('', '');
 
@@ -905,58 +904,6 @@ async function callApi(action, payload) {
 
       container.appendChild(item);
     });
-  }
-
-  function renderCheckerDropdown(filterText) {
-    const dropdown = document.getElementById('checker-dropdown');
-    dropdown.innerHTML = '';
-    if (!employeeListCache) {
-      dropdown.innerHTML = '<div class="dropdown-empty">Loading employees...</div>';
-      dropdown.classList.remove('hidden');
-      return;
-    }
-    const matches = employeeListCache.filter(function (emp) {
-      const id = String(emp.EmployeeID).toLowerCase();
-      const name = String(emp.EmployeeName).toLowerCase();
-      return !filterText || id.indexOf(filterText) !== -1 || name.indexOf(filterText) !== -1;
-    });
-    if (matches.length === 0) {
-      dropdown.innerHTML = '<div class="dropdown-empty">No matching employees.</div>';
-    } else {
-      matches.slice(0, 50).forEach(function (emp) {
-        const item = document.createElement('div');
-        item.className = 'dropdown-item';
-        item.innerHTML = '<div class="item-id">' + emp.EmployeeID + '</div><div class="item-name">' + emp.EmployeeName + '</div>';
-        item.addEventListener('click', function () { selectChecker(emp); });
-        dropdown.appendChild(item);
-      });
-    }
-    dropdown.classList.remove('hidden');
-  }
-
-  function selectChecker(emp) {
-    document.getElementById('checker-search').value = emp.EmployeeID + ' - ' + emp.EmployeeName;
-    document.getElementById('checker-dropdown').classList.add('hidden');
-
-    if (emp.Status !== 'Active') {
-      showCheckerMessage('Employee "' + emp.EmployeeID + '" is not Active. Cannot proceed.', 'error');
-      document.getElementById('checker-result').classList.add('hidden');
-      appState.continueData.checker = null;
-      return;
-    }
-
-    showCheckerMessage('', '');
-    document.getElementById('res-checker-id').textContent = emp.EmployeeID;
-    document.getElementById('res-checker-name').textContent = emp.EmployeeName;
-    document.getElementById('checker-result').classList.remove('hidden');
-
-    appState.continueData.checker = emp;
-  }
-
-  function showCheckerMessage(text, type) {
-    const el = document.getElementById('checker-message');
-    el.textContent = text;
-    el.className = 'message' + (type ? ' ' + type : '');
   }
 
   function renderContinuePartDropdown(filterText) {
@@ -1054,7 +1001,6 @@ async function callApi(action, payload) {
     continueSelectedDefect = null;
     document.getElementById('continue-part-search').value = '';
     document.getElementById('continue-defect-search').value = '';
-    updateContinueCountAsLockVisibility();
   }
 
   function renderContinueNewDefectList() {
@@ -1069,27 +1015,9 @@ async function callApi(action, payload) {
       item.querySelector('.btn-remove').addEventListener('click', function () {
         appState.continueData.newDefects.splice(index, 1);
         renderContinueNewDefectList();
-        updateContinueCountAsLockVisibility();
       });
       container.appendChild(item);
     });
-  }
-
-  /**
-   * Shows the "Count as Lock" field (positioned right before Save Round)
-   * only when at least one NEW defect has been added this round -
-   * carried-forward unsolved defects already have their own value and
-   * don't need a fresh decision.
-   */
-  function updateContinueCountAsLockVisibility() {
-    const field = document.getElementById('continue-count-as-lock-field');
-    if (appState.continueData.newDefects.length > 0) {
-      field.classList.remove('hidden');
-    } else {
-      field.classList.add('hidden');
-      document.getElementById('continue-count-as-lock-yes').checked = false;
-      document.getElementById('continue-count-as-lock-no').checked = false;
-    }
   }
 
   function showContinueDefectMessage(text, type) {
@@ -1099,24 +1027,11 @@ async function callApi(action, payload) {
   }
 
   function submitContinueInspection() {
-    if (!appState.continueData.checker) {
-      showSaveContinueMessage('Please select the checking employee.', 'error');
-      return;
-    }
-
-    let countAsLockForNew = null;
-    if (appState.continueData.newDefects.length > 0) {
-      const yesChecked = document.getElementById('continue-count-as-lock-yes').checked;
-      const noChecked = document.getElementById('continue-count-as-lock-no').checked;
-      if (!yesChecked && !noChecked) {
-        showSaveContinueMessage('Please select Count as Lock (Yes/No) for the new defect(s).', 'error');
-        return;
-      }
-      countAsLockForNew = yesChecked;
-    }
-
+    // Count as Lock for any new defects this round automatically reuses
+    // the decision made at Round 1 (stored in appState.continueData
+    // when this screen loaded) - not asked again here.
     const newDefectsWithFlag = appState.continueData.newDefects.map(function (d) {
-      return { part: d.part, defect: d.defect, countInFTT: countAsLockForNew };
+      return { part: d.part, defect: d.defect, countInFTT: appState.continueData.countInFTTForNewDefects };
     });
 
     const payload = {
