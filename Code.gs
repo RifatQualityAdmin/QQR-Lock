@@ -181,7 +181,7 @@ function getSheetDataAsObjects(sheetName) {
         // Convert Date objects to plain strings - google.script.run (and
         // JSON serialization for the API) can fail on raw Date objects.
         obj[header] = (value instanceof Date)
-          ? Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
+          ? Utilities.formatDate(value, 'Asia/Dhaka', 'yyyy-MM-dd HH:mm:ss')
           : value;
       });
       return obj;
@@ -409,7 +409,7 @@ function getDefectList() {
  * @return {string} Generated ID.
  */
 function generateId(prefix) {
-  const ts = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss');
+  const ts = Utilities.formatDate(new Date(), 'Asia/Dhaka', 'yyyyMMddHHmmss');
   const rand = Math.floor(100 + Math.random() * 900);
   return prefix + '-' + ts + '-' + rand;
 }
